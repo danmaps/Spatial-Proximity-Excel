@@ -1,0 +1,8 @@
+streamlit
+pandas
+openpyxl
+geopandas
+shapely
+pyproj
+fiona
+rtree
