@@ -2,26 +2,41 @@ import streamlit as st
 from io import BytesIO
 import geopandas as gpd
 import pandas as pd
-from shapely.geometry import Point
-import numpy as np
-from pathlib import Path
+
+# Possible column names for latitude and longitude
+default_lat_names = ['LAT', 'lat', 'latitude', 'Latitude']
+default_lon_names = ['LONG', 'long', 'longitude', 'Longitude']
+
+def find_lat_lon_columns(df, default_lat_names, default_lon_names):
+    lat_col = None
+    lon_col = None
+
+    for lat_name in default_lat_names:
+        if lat_name in df.columns:
+            lat_col = lat_name
+            break
+
+    for lon_name in default_lon_names:
+        if lon_name in df.columns:
+            lon_col = lon_name
+            break
+
+    return lat_col, lon_col
 
 # Helper function to convert DataFrame to Excel in memory
 def convert_df_to_excel(_df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         _df.to_excel(writer, index=False, sheet_name='Sheet1')
-        writer.book.close()  # Explicitly close the xlsxwriter Workbook
     processed_data = output.getvalue()
-    output.close()  # Close the BytesIO object
     return processed_data
 
 
 
 # Main processing function
-def process_data(df):
+def process_data(df, lat_col, lon_col):
     # Convert DataFrame to GeoDataFrame
-    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df['LONG'], df['LAT']))
+    gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[lon_col], df[lat_col]))
     gdf = gdf.set_crs(epsg=4326)
 
     # Define the distance threshold in meters (100 feet)
@@ -67,7 +82,16 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file)
     st.write('Data Preview:', df.head())
 
-    processed_gdf = process_data(df)
+    # Find latitude and longitude columns
+    lat_col, lon_col = find_lat_lon_columns(df, default_lat_names, default_lon_names)
+
+    if not lat_col or not lon_col:
+        st.error("Could not find default latitude and longitude columns. Please select the columns.")
+        lat_col = st.selectbox("Select Latitude Column", df.columns)
+        lon_col = st.selectbox("Select Longitude Column", df.columns)
+
+if uploaded_file and lat_col and lon_col:
+    processed_gdf = process_data(df, lat_col, lon_col)
     st.write('Processed Data:', processed_gdf.head())
 
     df_xlsx = convert_df_to_excel(processed_gdf)
