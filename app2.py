@@ -48,8 +48,15 @@ def process_data(df):
                 'distance_feet': pm_row.geometry.distance(row.geometry) * 3.28084
             })
 
+
     nearby_df = pd.DataFrame(nearby_points)
-    merged_gdf = gdf.merge(nearby_df, left_index=True, right_on='index')
+
+    # Select the relevant columns for merging
+    columns_to_merge = ['index', 'nearby_floc_id', 'distance_feet']
+    merged_gdf = gdf.merge(nearby_df[columns_to_merge], left_index=True, right_on='index')
+
+    # Drop the 'index' column as it's no longer needed after the merge
+    merged_gdf.drop(columns=['index','geometry'], inplace=True)
     return merged_gdf
 
 # Streamlit UI
