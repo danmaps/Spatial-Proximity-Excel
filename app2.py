@@ -7,13 +7,15 @@ import numpy as np
 from pathlib import Path
 
 # Helper function to convert DataFrame to Excel in memory
-@st.cache
-def convert_df_to_excel(df):
+def convert_df_to_excel(_df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Sheet1')
+        writer.book.close()  # Explicitly close the xlsxwriter Workbook
     processed_data = output.getvalue()
+    output.close()  # Close the BytesIO object
     return processed_data
+
 
 
 # Main processing function
