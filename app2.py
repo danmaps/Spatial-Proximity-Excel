@@ -51,7 +51,7 @@ def process_data(df):
     return merged_gdf
 
 # Streamlit UI
-st.title('Spatial-Proximity-Excel')
+st.title('Spatial Proximity Excel')
 uploaded_file = st.file_uploader("Choose a .xlsx file", type="xlsx")
 
 if uploaded_file:
