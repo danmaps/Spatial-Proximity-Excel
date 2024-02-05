@@ -10,7 +10,7 @@ from pathlib import Path
 def convert_df_to_excel(_df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='Sheet1')
+        _df.to_excel(writer, index=False, sheet_name='Sheet1')
         writer.book.close()  # Explicitly close the xlsxwriter Workbook
     processed_data = output.getvalue()
     output.close()  # Close the BytesIO object
