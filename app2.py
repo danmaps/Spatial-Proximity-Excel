@@ -10,11 +10,12 @@ from pathlib import Path
 @st.cache
 def convert_df_to_excel(df):
     output = BytesIO()
-    writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    df.to_excel(writer, index=False, sheet_name='Sheet1')
-    writer.save()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Sheet1')
+        writer.save()  # This line ensures that the data is written to the BytesIO object
     processed_data = output.getvalue()
     return processed_data
+
 
 # Main processing function
 def process_data(df):
