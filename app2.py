@@ -4,7 +4,7 @@ import geopandas as gpd
 import pandas as pd
 import folium
 from streamlit_folium import folium_static
-from folium import plugins
+import os
 
 # https://chat.openai.com/c/33d6abdb-0490-4be9-b605-772e357a1489
 
@@ -51,36 +51,48 @@ def generate_buffers(gdf, distance):
     return gdf
 
 def get_bounds(gdf_with_buffers):
-    # Calculate bounds of the buffers
-    bounds = gdf_with_buffers['buffer'].total_bounds
-    # Bounds are in the form [minx, miny, maxx, maxy], we need to return as [[miny, minx], [maxy, maxx]]
+
+    # If your data is in a projected CRS, convert it to WGS 84 (latitude and longitude)
+    if gdf_with_buffers.crs != 'epsg:4326':
+        gdf_with_buffers = gdf_with_buffers.to_crs('epsg:4326')
+
+    # Then calculate the bounds
+    bounds = gdf_with_buffers.total_bounds
+
+    # Correct the order of the bounds for Folium: [[southwest_lat, southwest_lon], [northeast_lat, northeast_lon]]
     return [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
+
 
 def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
     # Generate buffers and calculate bounds
     gdf['buffer'] = gdf.apply(lambda row: row.geometry.buffer(distance_threshold_meters), axis=1)
     bounds = get_bounds(gdf)
+    # st.write(bounds)
 
     # Start with a base map (zoom start will be adjusted with fit_bounds)
     m = folium.Map()
 
     # Add points to the map
     for _, row in gdf.iterrows():
+        # Determine the color based on the presence of a nearby_id
+        point_color = 'red' if pd.notnull(row['distance_feet']) else 'black'
+        
         folium.CircleMarker(
             location=[row[lat_col], row[lon_col]],
-            radius=3,
-            color='red',
+            radius=1,  # Keep the radius small for a dot appearance
+            color=point_color,
             fill=True,
-            fill_color='red'
+            fill_color=point_color,
+            fill_opacity=1  # Set fill opacity to 1 for a solid color
         ).add_to(m)
 
         # Add buffers to the map
         folium.Circle(
             location=[row[lat_col], row[lon_col]],
             radius=distance_threshold_meters,
-            color='blue',
-            fill=False
+            color='blue'
         ).add_to(m)
+
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
@@ -98,7 +110,7 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
     # Use spatial indexing for efficiency
     tree = projected_gdf.sindex
 
-     # Update to use the generic 'nearby_id' and include the selected ID column if provided
+    # Calculate nearby points
     nearby_points = []
     for index, row in projected_gdf.iterrows():
         buffer = row.geometry.buffer(distance_threshold)
@@ -110,7 +122,7 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
         for pm_index, pm_row in precise_matches.iterrows():
             nearby_point_info = {
                 'index': index,
-                'distance_feet': pm_row.geometry.distance(row.geometry) * 3.28084
+                'distance_feet': round(pm_row.geometry.distance(row.geometry) * 3.28084, 2)
             }
             if id_column:
                 nearby_point_info['nearby_id'] = pm_row[id_column]
@@ -118,21 +130,71 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
 
     nearby_df = pd.DataFrame(nearby_points)
 
+    # Perform a left merge to include all original points
+    merged_gdf = gdf.merge(nearby_df, how='left', left_index=True, right_on='index')
+
+    # If an ID column is provided, add it to the merged_gdf
     if id_column:
-        nearby_df = nearby_df.merge(df[[id_column]], left_on='index', right_index=True, how='left')
-
-    # Select the relevant columns for merging
-    columns_to_merge = ['index', 'nearby_id', 'distance_feet']
-    merged_gdf = gdf.merge(nearby_df[columns_to_merge], left_index=True, right_on='index')
-
-    # Drop the 'index' column as it's no longer needed after the merge
-    merged_gdf.drop(columns=['index'], inplace=True)
+        merged_gdf = merged_gdf.merge(df[[id_column]], left_on='index', right_index=True, how='left')
+        merged_gdf.rename(columns={id_column: 'original_id'}, inplace=True)
+    
+    # Drop the 'index', 'OID_y', and 'buffer' columns as they are no longer needed
+    columns_to_drop = ['index', f'{id_column}_y', 'buffer']
+    columns_to_drop = [col for col in columns_to_drop if col in merged_gdf.columns]  # Ensure the column exists before dropping
+    merged_gdf.drop(columns=columns_to_drop, inplace=True)
+    merged_gdf.rename(columns={f'{id_column}_x': id_column}, inplace=True)
+    
     return merged_gdf
+
+
+def handle_file_upload():
+    uploaded_file = st.file_uploader("Choose a .xlsx file", type="xlsx")
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file)
+    else:
+        df = pd.DataFrame(sample_data)  # Use sample data if no file is uploaded
+    with st.expander("Data Preview"):
+        st.write(df.head())
+    return df, uploaded_file
+
+def select_columns(df, default_lat_names, default_lon_names):
+    lat_col, lon_col = find_lat_lon_columns(df, default_lat_names, default_lon_names)
+    if not lat_col or not lon_col:
+        st.error("Could not find default latitude and longitude columns. Please select the columns.")
+        lat_col = st.selectbox("Select Latitude Column", df.columns)
+        lon_col = st.selectbox("Select Longitude Column", df.columns)
+
+    # Provide an option to select an ID column or continue without it
+    id_col_options = ['None'] + list(df.columns)
+    id_col = st.selectbox("Select an ID Column (optional):", options=id_col_options, index=0)
+    if id_col == 'None':
+        id_col = None
+
+    return lat_col, lon_col, id_col
+
+def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file=None):
+    if lat_col and lon_col:
+        processed_gdf = process_data(df, lat_col, lon_col, distance_threshold_meters, id_col)
+        display_gdf = processed_gdf.drop(columns=['geometry'])
+        st.write('Processed Data:', display_gdf.head())
+        with st.expander("View data on map"):
+            # Create and display the map with Folium
+            folium_map = create_folium_map(processed_gdf, distance_threshold_meters, lat_col, lon_col)
+            folium_static(folium_map)
+
+        # Convert to Excel and offer download
+        df_xlsx = convert_df_to_excel(processed_gdf)
+        file_name = 'processed_data.xlsx'
+        if uploaded_file:
+            file_name = f"{os.path.splitext(uploaded_file.name)[0]}_{int(distance_threshold_meters * 3.28084)}ft.xlsx"
+        st.download_button(label='📥 Download Result',
+                           data=df_xlsx,
+                           file_name=file_name,
+                           mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
 
 # Streamlit UI
 st.title('Spatial Proximity Excel')
-uploaded_file = st.file_uploader("Choose a .xlsx file", type="xlsx")
-
 
 # Define a slider for distance selection
 distance_threshold_feet = st.slider(
@@ -159,65 +221,6 @@ if custom_distance_threshold_feet != distance_threshold_feet:
 # Now convert the chosen distance threshold in feet to meters for processing
 distance_threshold_meters = feet_to_meters(distance_threshold_feet)
 
-if uploaded_file:
-    df = pd.read_excel(uploaded_file)
-    st.write('Data Preview:', df.head())
-
-    # Find latitude and longitude columns
-    lat_col, lon_col = find_lat_lon_columns(df, default_lat_names, default_lon_names)
-
-    if not lat_col or not lon_col:
-        st.error("Could not find default latitude and longitude columns. Please select the columns.")
-        lat_col = st.selectbox("Select Latitude Column", df.columns)
-        lon_col = st.selectbox("Select Longitude Column", df.columns)
-
-    # After uploading and displaying the file, let the user select an ID column
-    id_col = None
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-        st.write('Data Preview:', df.head())
-
-        # Provide an option to select an ID column or continue without it
-        id_col_options = ['None'] + list(df.columns)
-        id_col = st.selectbox("Select an ID Column (optional):", options=id_col_options, index=0)
-        if id_col == 'None':
-            id_col = None
-
-    if lat_col and lon_col:
-        processed_gdf = process_data(df, lat_col, lon_col, distance_threshold_meters, id_col)
-        st.write('Processed Data:', processed_gdf.head())
-        # Create the map with Folium
-        folium_map = create_folium_map(processed_gdf, distance_threshold_meters,lat_col, lon_col)
-        
-        # Display the map in the Streamlit app
-        folium_static(folium_map)
-        df_xlsx = convert_df_to_excel(processed_gdf)
-
-        
-        st.download_button(label='📥 Download Result',
-                        data=df_xlsx,
-                        file_name='processed_data.xlsx',
-                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-else: # use sample data
-    df = pd.DataFrame(sample_data)
-    st.write('Data Preview:', df.head())
-
-    # Find latitude and longitude columns
-    lat_col, lon_col = find_lat_lon_columns(df, default_lat_names, default_lon_names)
-
-    id_col = "FLOC_ID"
-
-    processed_gdf = process_data(df, lat_col, lon_col, distance_threshold_meters, id_col)
-    st.write('Processed Data:', processed_gdf.head())
-    # Create the map with Folium
-    folium_map = create_folium_map(processed_gdf, distance_threshold_meters,lat_col, lon_col)
-    
-    # Display the map in the Streamlit app
-    folium_static(folium_map)
-    df_xlsx = convert_df_to_excel(processed_gdf)
-
-    st.download_button(label='📥 Download Enriched Excel File',
-                    data=df_xlsx,
-                    file_name='processed_data.xlsx',
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+df, uploaded_file = handle_file_upload()
+lat_col, lon_col, id_col = select_columns(df, default_lat_names, default_lon_names)
+process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file)
