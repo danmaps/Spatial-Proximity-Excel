@@ -148,7 +148,11 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
 
 
 def handle_file_upload():
-    uploaded_file = st.file_uploader("Choose a .xlsx file", type="xlsx")
+    with st.sidebar:
+        st.caption("Please upload a .xlsx file to get started. After uploading, select the appropriate columns and set the desired distance threshold.")
+        uploaded_file = st.file_uploader("Choose a .xlsx file", type="xlsx")
+
+    # uploaded_file = st.file_uploader("Choose a .xlsx file", type="xlsx")
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
     else:
@@ -165,10 +169,16 @@ def select_columns(df, default_lat_names, default_lon_names):
         lon_col = st.selectbox("Select Longitude Column", df.columns)
 
     # Provide an option to select an ID column or continue without it
+
     id_col_options = ['None'] + list(df.columns)
-    id_col = st.selectbox("Select an ID Column (optional):", options=id_col_options, index=0)
+    with st.sidebar:
+        # Default to the first column in the DataFrame
+        id_col = st.selectbox("Select an ID Column (optional):", options=id_col_options, index=1)
+
+    # Check if 'None' is selected and set id_col to None
     if id_col == 'None':
         id_col = None
+
 
     return lat_col, lon_col, id_col
 
@@ -195,32 +205,37 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
 
 # Streamlit UI
 st.title('Spatial Proximity Excel')
+with st.sidebar:
 
-# Define a slider for distance selection
-distance_threshold_feet = st.slider(
-    "Select the distance threshold in feet (for custom values, use the text field below)",
-    min_value=25,
-    max_value=800,
-    value=100,  # default value
-    step=25,
-    format="%d feet"
-)
+    df, uploaded_file = handle_file_upload()
 
-# Define a number input for custom distance thresholds
-custom_distance_threshold_feet = st.number_input(
-    "Or type a custom distance threshold in feet",
-    min_value=0.0,
-    value=float(distance_threshold_feet),  # set the default value to the slider's value
-    step=0.1,
-    format="%.2f"
-)
-# Choose which value to use based on whether the custom value differs from the slider
-if custom_distance_threshold_feet != distance_threshold_feet:
-    distance_threshold_feet = custom_distance_threshold_feet
+        
+    # Define a slider for distance selection
+    distance_threshold_feet = st.slider(
+        "Select the distance threshold in feet (for custom values, use the text field below)",
+        min_value=25,
+        max_value=800,
+        value=100,  # default value
+        step=25,
+        format="%d feet"
+    )
 
-# Now convert the chosen distance threshold in feet to meters for processing
-distance_threshold_meters = feet_to_meters(distance_threshold_feet)
+    # Define a number input for custom distance thresholds
+    custom_distance_threshold_feet = st.number_input(
+        "Or type a custom distance threshold in feet",
+        min_value=0.0,
+        value=float(distance_threshold_feet),  # set the default value to the slider's value
+        step=10.0,
+        format="%f"
+    )
+    # Choose which value to use based on whether the custom value differs from the slider
+    if custom_distance_threshold_feet != distance_threshold_feet:
+        distance_threshold_feet = custom_distance_threshold_feet
 
-df, uploaded_file = handle_file_upload()
-lat_col, lon_col, id_col = select_columns(df, default_lat_names, default_lon_names)
+    # Now convert the chosen distance threshold in feet to meters for processing
+    distance_threshold_meters = feet_to_meters(distance_threshold_feet)
+    
+    st.info("📌 Instructions: Select an ID Column from the dropdown to associate each point with a unique identifier; if no ID is required for your analysis, you may choose 'None'.")
+
+    lat_col, lon_col, id_col = select_columns(df, default_lat_names, default_lon_names)
 process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file)
