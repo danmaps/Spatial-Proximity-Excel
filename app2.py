@@ -64,6 +64,9 @@ def get_bounds(gdf_with_buffers):
 
 
 def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
+    # Remove rows where lat or lon is NaN
+    gdf = gdf.dropna(subset=[lat_col, lon_col])
+
     # Generate buffers and calculate bounds
     gdf['buffer'] = gdf.apply(lambda row: row.geometry.buffer(distance_threshold_meters), axis=1)
     bounds = get_bounds(gdf)
@@ -172,6 +175,7 @@ def select_columns(df, default_lat_names, default_lon_names):
 
     id_col_options = ['None'] + list(df.columns)
     with st.sidebar:
+        st.caption("Select an ID Column from the dropdown to associate each point with a unique identifier; if no ID is required for your analysis, you may choose 'None'.")
         # Default to the first column in the DataFrame
         id_col = st.selectbox("Select an ID Column (optional):", options=id_col_options, index=1)
 
@@ -205,7 +209,7 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
                            file_name=file_name,
                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         
-        
+
         with st.expander("View data on map"):
             # Create and display the map with Folium
             folium_map = create_folium_map(processed_gdf, distance_threshold_meters, lat_col, lon_col)
@@ -245,7 +249,5 @@ with st.sidebar:
     # Now convert the chosen distance threshold in feet to meters for processing
     distance_threshold_meters = feet_to_meters(distance_threshold_feet)
     
-    st.info("📌 Instructions: Select an ID Column from the dropdown to associate each point with a unique identifier; if no ID is required for your analysis, you may choose 'None'.")
-
     lat_col, lon_col, id_col = select_columns(df, default_lat_names, default_lon_names)
 process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file)
