@@ -8,6 +8,11 @@ from folium import plugins
 
 # https://chat.openai.com/c/33d6abdb-0490-4be9-b605-772e357a1489
 
+sample_data = {
+    "FLOC_ID": ["UG-5709118","UG-5709119","UG-5709120","UG-5709121"],
+    "LAT": [34.297416,34.297436,34.297472,34.297491],
+    "LONG": [-118.917072,-118.917028,-118.916945,-118.916901]}
+
 # Possible column names for latitude and longitude
 default_lat_names = ['LAT', 'lat', 'latitude', 'Latitude']
 default_lon_names = ['LONG', 'long', 'longitude', 'Longitude']
@@ -132,10 +137,10 @@ uploaded_file = st.file_uploader("Choose a .xlsx file", type="xlsx")
 # Define a slider for distance selection
 distance_threshold_feet = st.slider(
     "Select the distance threshold in feet (for custom values, use the text field below)",
-    min_value=50,
-    max_value=1000,
+    min_value=25,
+    max_value=800,
     value=100,  # default value
-    step=50,
+    step=25,
     format="%d feet"
 )
 
@@ -178,7 +183,31 @@ if uploaded_file:
         if id_col == 'None':
             id_col = None
 
-if uploaded_file and lat_col and lon_col:
+    if lat_col and lon_col:
+        processed_gdf = process_data(df, lat_col, lon_col, distance_threshold_meters, id_col)
+        st.write('Processed Data:', processed_gdf.head())
+        # Create the map with Folium
+        folium_map = create_folium_map(processed_gdf, distance_threshold_meters,lat_col, lon_col)
+        
+        # Display the map in the Streamlit app
+        folium_static(folium_map)
+        df_xlsx = convert_df_to_excel(processed_gdf)
+
+        
+        st.download_button(label='📥 Download Result',
+                        data=df_xlsx,
+                        file_name='processed_data.xlsx',
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+else: # use sample data
+    df = pd.DataFrame(sample_data)
+    st.write('Data Preview:', df.head())
+
+    # Find latitude and longitude columns
+    lat_col, lon_col = find_lat_lon_columns(df, default_lat_names, default_lon_names)
+
+    id_col = "FLOC_ID"
+
     processed_gdf = process_data(df, lat_col, lon_col, distance_threshold_meters, id_col)
     st.write('Processed Data:', processed_gdf.head())
     # Create the map with Folium
@@ -188,12 +217,7 @@ if uploaded_file and lat_col and lon_col:
     folium_static(folium_map)
     df_xlsx = convert_df_to_excel(processed_gdf)
 
-    
-    st.download_button(label='📥 Download Result',
-                       data=df_xlsx,
-                       file_name='processed_data.xlsx',
-                       mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-
-
-
+    st.download_button(label='📥 Download Enriched Excel File',
+                    data=df_xlsx,
+                    file_name='processed_data.xlsx',
+                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
