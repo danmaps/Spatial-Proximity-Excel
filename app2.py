@@ -10,9 +10,11 @@ import os
 # https://chat.openai.com/c/33d6abdb-0490-4be9-b605-772e357a1489
 
 sample_data = {
-    "FLOC_ID": ["UG-5709118","UG-5709119","UG-5709120","UG-5709121"],
+    "FLOC_ID": ["ABC-118","ABC-119","ABC-120","ABC-121"],
     "LAT": [34.297416,34.297436,34.297472,34.297491],
     "LONG": [-118.917072,-118.917028,-118.916945,-118.916901]}
+
+pd.set_option('display.precision', 6) # trying to keep my coords distinct
 
 # Possible column names for latitude and longitude
 default_lat_names = ['LAT', 'lat', 'latitude', 'Latitude']
@@ -206,7 +208,7 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
             display_gdf = display_gdf.dropna(subset=['distance_feet'])
 
         # Display the processed DataFrame
-        st.write('Processed Data:', display_gdf.head())
+        st.write('Processed Data Sample:', display_gdf)
         
         # Convert to Excel and offer download
         df_xlsx = convert_df_to_excel(display_gdf)
@@ -218,20 +220,15 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
                            file_name=file_name,
                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         
-
-        with st.expander("View data on map"):
-            # Create and display the map with Folium
-            folium_map = create_folium_map(processed_gdf, distance_threshold_meters, lat_col, lon_col)
-            folium_static(folium_map)
-
-
+        # Create and display the map with Folium
+        folium_map = create_folium_map(processed_gdf, distance_threshold_meters, lat_col, lon_col)
+        folium_static(folium_map)
 
 # Streamlit UI
-st.title('Spatial Proximity Excel')
 with st.sidebar:
+    st.title('Spatial Proximity Excel Enrichment')
 
     df, uploaded_file = handle_file_upload()
-
         
     # Define a slider for distance selection
     distance_threshold_feet = st.slider(
@@ -251,6 +248,7 @@ with st.sidebar:
         step=10.0,
         format="%f"
     )
+
     # Choose which value to use based on whether the custom value differs from the slider
     if custom_distance_threshold_feet != distance_threshold_feet:
         distance_threshold_feet = custom_distance_threshold_feet
