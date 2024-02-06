@@ -168,10 +168,10 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
 
 def handle_file_upload():
     with st.sidebar:
-        st.caption("Please upload a .xlsx file to get started. After uploading, select the appropriate columns and set the desired distance threshold.")
-        uploaded_file = st.file_uploader("Choose a .xlsx file", type="xlsx")
+        #st.caption("Please upload a .xlsx file to get started. After uploading, select the appropriate columns and set the desired distance threshold.")
+        msg = "Choose a .xlsx file to get started. Or play around with the sample data (50 random points around PIV)."
+        uploaded_file = st.file_uploader(msg, type="xlsx")
 
-    # uploaded_file = st.file_uploader("Choose a .xlsx file", type="xlsx")
     if uploaded_file:
         df = pd.read_excel(uploaded_file)
     else:
@@ -191,9 +191,9 @@ def select_columns(df, default_lat_names, default_lon_names):
 
     id_col_options = ['None'] + list(df.columns)
     with st.sidebar:
-        st.caption("Select an ID Column from the dropdown to associate each point with a unique identifier; if no ID is required for your analysis, you may choose 'None'.")
+        msg = "Select an ID Column from the dropdown to associate each point with a unique identifier; if no ID is required for your analysis, you may choose 'None'. This controls whether a `nearby_id` field is included in the output."
         # Default to the first column in the DataFrame
-        id_col = st.selectbox("Specify an ID Column:", options=id_col_options, index=1)
+        id_col = st.selectbox(msg, options=id_col_options, index=1)
 
     # Check if 'None' is selected and set id_col to None
     if id_col == 'None':
@@ -244,7 +244,7 @@ with st.sidebar:
         
     # Define a slider for distance selection
     distance_threshold_feet = st.slider(
-        "Select the distance threshold in feet (for custom values, use the text field below)",
+        "Distance threshold in feet",
         min_value=25,
         max_value=800,
         value=100,  # default value
@@ -254,7 +254,7 @@ with st.sidebar:
 
     # Define a number input for custom distance thresholds
     custom_distance_threshold_feet = st.number_input(
-        "Or type a custom distance threshold in feet",
+        "Or enter a custom distance threshold in feet",
         min_value=0.0,
         value=float(distance_threshold_feet),  # set the default value to the slider's value
         step=10.0,
@@ -269,4 +269,20 @@ with st.sidebar:
     distance_threshold_meters = feet_to_meters(distance_threshold_feet)
     
     lat_col, lon_col, id_col = select_columns(df, default_lat_names, default_lon_names)
+
+    st.write("---")
+    st.write("### How This Works")
+    st.write("""
+    - Upload your data in the .xlsx format.
+    - Select the appropriate columns for latitude, longitude, and an ID (if applicable).
+    - Set the distance threshold to find nearby points.
+    - The data is processed automatically. You should see the results on the map and can download the output .xlsx file.
+    """)
+
+    with st.expander("How This Was Made"):
+        st.write("""
+        This tool is powered by Streamlit, which allows for rapid development of data applications with Python.
+        It uses geospatial libraries like Geopandas for the geographic data processing and Folium for creating interactive maps.
+        """)
+
 process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file)
