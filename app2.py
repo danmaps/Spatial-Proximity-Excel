@@ -3,6 +3,7 @@ from io import BytesIO
 import geopandas as gpd
 import pandas as pd
 import folium
+from folium import plugins
 from streamlit_folium import folium_static
 import os
 
@@ -78,27 +79,35 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
     # Add points to the map
     for _, row in gdf.iterrows():
         # Determine the color based on the presence of a nearby_id
-        point_color = 'red' if pd.notnull(row['distance_feet']) else 'black'
-        
+        point_color = 'red' if pd.notnull(row['distance_feet']) else 'blue'
+        tooltip_text = str(row[id_col]) if id_col and pd.notnull(row[id_col]) else 'No ID'
+
         folium.CircleMarker(
             location=[row[lat_col], row[lon_col]],
-            radius=1,  # Keep the radius small for a dot appearance
+            radius=3,
             color=point_color,
             fill=True,
             fill_color=point_color,
-            fill_opacity=1  # Set fill opacity to 1 for a solid color
+            fill_opacity=1,  # Set fill opacity to 1 for a solid color
+            weight=2,
+            tooltip=tooltip_text,  # Add tooltip to the marker
+            popup=folium.Popup(tooltip_text, parse_html=True)  # Add popup to the marker
+
         ).add_to(m)
 
         # Add buffers to the map
         folium.Circle(
             location=[row[lat_col], row[lon_col]],
             radius=distance_threshold_meters,
-            color='blue'
+            color='blue',
         ).add_to(m)
 
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
+
+    # Add fullscreen control to the map
+    plugins.Fullscreen(position='topright', title='Expand me', title_cancel='Exit me', force_separate_button=True).add_to(m)
 
     return m
 
@@ -200,7 +209,7 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
         st.write('Processed Data:', display_gdf.head())
         
         # Convert to Excel and offer download
-        df_xlsx = convert_df_to_excel(processed_gdf)
+        df_xlsx = convert_df_to_excel(display_gdf)
         file_name = 'processed_data.xlsx'
         if uploaded_file:
             file_name = f"{os.path.splitext(uploaded_file.name)[0]}_{int(distance_threshold_meters * 3.28084)}ft.xlsx"
