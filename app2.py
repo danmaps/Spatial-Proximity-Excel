@@ -143,7 +143,11 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
             nearby_points.append(nearby_point_info)
 
     nearby_df = pd.DataFrame(nearby_points)
-
+    
+    # Check if nearby_df is empty, if so, create an empty DataFrame with the 'index' column
+    if nearby_df.empty:
+        nearby_df = pd.DataFrame(columns=['index', 'nearby_id', 'distance_feet'])
+        st.warning(f"No points within {int(distance_threshold_feet)}ft of each other!")
     # Perform a left merge to include all original points
     merged_gdf = gdf.merge(nearby_df, how='left', left_index=True, right_on='index')
 
@@ -188,7 +192,7 @@ def select_columns(df, default_lat_names, default_lon_names):
     with st.sidebar:
         st.caption("Select an ID Column from the dropdown to associate each point with a unique identifier; if no ID is required for your analysis, you may choose 'None'.")
         # Default to the first column in the DataFrame
-        id_col = st.selectbox("Select an ID Column (optional):", options=id_col_options, index=1)
+        id_col = st.selectbox("Specify an ID Column:", options=id_col_options, index=1)
 
     # Check if 'None' is selected and set id_col to None
     if id_col == 'None':
@@ -208,7 +212,7 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
             display_gdf = display_gdf.dropna(subset=['distance_feet'])
 
         # Display the processed DataFrame
-        st.write('Processed Data Sample:', display_gdf)
+        st.write('Processed Data:', display_gdf)
         
         # Convert to Excel and offer download
         df_xlsx = convert_df_to_excel(display_gdf)
@@ -223,6 +227,8 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
         # Create and display the map with Folium
         folium_map = create_folium_map(processed_gdf, distance_threshold_meters, lat_col, lon_col)
         folium_static(folium_map)
+        if id_col:
+            st.caption(f"Hover/click on points to view {id_col}")
 
 # Streamlit UI
 with st.sidebar:
