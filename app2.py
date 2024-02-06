@@ -282,7 +282,7 @@ with st.sidebar:
     with st.expander("How This Was Made"):
         st.write("""
         This tool is powered by Streamlit, which allows for rapid development of data applications with Python.
-        It uses geospatial libraries like Geopandas for the geographic data processing and Folium for creating interactive maps.
+        It uses geospatial libraries like Geopandas for the geographic data processing and Folium for creating interactive maps. You can see the source code [here](https://github.com/danmaps/spatial-proximity-excel/).🤓
         """)
 
 process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file)
