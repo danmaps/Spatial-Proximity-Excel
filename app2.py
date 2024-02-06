@@ -186,12 +186,15 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
     if lat_col and lon_col:
         processed_gdf = process_data(df, lat_col, lon_col, distance_threshold_meters, id_col)
         display_gdf = processed_gdf.drop(columns=['geometry'])
-        st.write('Processed Data:', display_gdf.head())
-        with st.expander("View data on map"):
-            # Create and display the map with Folium
-            folium_map = create_folium_map(processed_gdf, distance_threshold_meters, lat_col, lon_col)
-            folium_static(folium_map)
+        hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
 
+        if hide_null_distance:
+            # Filter out rows where 'distance_feet' is null
+            display_gdf = display_gdf.dropna(subset=['distance_feet'])
+
+        # Display the processed DataFrame
+        st.write('Processed Data:', display_gdf.head())
+        
         # Convert to Excel and offer download
         df_xlsx = convert_df_to_excel(processed_gdf)
         file_name = 'processed_data.xlsx'
@@ -201,6 +204,13 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
                            data=df_xlsx,
                            file_name=file_name,
                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        
+        
+        with st.expander("View data on map"):
+            # Create and display the map with Folium
+            folium_map = create_folium_map(processed_gdf, distance_threshold_meters, lat_col, lon_col)
+            folium_static(folium_map)
+
 
 
 # Streamlit UI
