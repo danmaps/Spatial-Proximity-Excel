@@ -214,6 +214,11 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
 
         # Display the processed DataFrame
         st.write('Processed Data:', display_gdf)
+        filtered_df = processed_gdf.dropna(subset=['distance_feet'])
+        
+        if id_col:
+            count = filtered_df[id_col].nunique()
+            st.caption(f"{count}/{len(df)} points are within {int(distance_threshold_feet)}ft of each other.")
         
         # Convert to Excel and offer download
         df_xlsx = convert_df_to_excel(display_gdf)
