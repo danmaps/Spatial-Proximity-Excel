@@ -7,3 +7,5 @@ pyproj
 fiona
 rtree
 xlsxwriter
+folium
+streamlit-folium
