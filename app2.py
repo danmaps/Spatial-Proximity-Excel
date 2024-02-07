@@ -280,9 +280,9 @@ with st.sidebar:
     
     lat_col, lon_col, id_col = select_columns(df)
     
-    st.write("---")
-    st.write("### How it works")
-    st.write("""
+    "---"
+    "### How it works"
+    """
     This tool augments Excel spreadsheets with proximity analysis capabilities. It requires a spreadsheet containing latitude and longitude coordinates and adds two fields:
 
     
@@ -290,21 +290,21 @@ with st.sidebar:
     2. **Nearby Points**(`nearby_id`): Identifies points within a specified distance threshold (default 100 feet).
 
     The tool allows for adjustment of the distance threshold and outputs an enhanced spreadsheet with spatial proximity details for further analysis.
-    """)
+    """
     
-    st.write("---")
-    st.write("### How to use this")
-    st.write("""
+    "---"
+    "### How to use this"
+    """
     - Upload your data in the .xlsx format.
     - Select the appropriate columns for latitude, longitude, and an ID (if applicable).
     - Set the distance threshold to find nearby points.
     - The data is processed automatically. You should see the results on the map and can download the output .xlsx file.
-    """)
+    """
 
     with st.expander("How This Was Made"):
-        st.write("""
+        """
         This tool is powered by Streamlit, which allows for rapid development of data applications with Python.
         It uses geospatial libraries like Geopandas for the geographic data processing and Folium for creating interactive maps. You can see the source code [here](https://github.com/danmaps/spatial-proximity-excel/).🤓
-        """)
+        """
 
 process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file)
