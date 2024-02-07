@@ -148,7 +148,7 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
     # Check if nearby_df is empty, if so, create an empty DataFrame with the 'index' column
     if nearby_df.empty:
         nearby_df = pd.DataFrame(columns=['index', 'nearby_id', 'distance_feet'])
-        st.warning(f"No points within {int(distance_threshold_feet)}ft of each other!")
+        st.warning(f"No points within {int(distance_threshold_feet)}ft of another!")
     # Perform a left merge to include all original points
     merged_gdf = gdf.merge(nearby_df, how='left', left_index=True, right_on='index')
 
@@ -218,7 +218,7 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
         
         if id_col:
             count = filtered_df[id_col].nunique()
-            st.caption(f"{count}/{len(df)} points are within {int(distance_threshold_feet)}ft of each other.")
+            st.write(f"{count}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another.")
         
         # Convert to Excel and offer download
         df_xlsx = convert_df_to_excel(display_gdf)
@@ -269,9 +269,21 @@ with st.sidebar:
     distance_threshold_meters = feet_to_meters(distance_threshold_feet)
     
     lat_col, lon_col, id_col = select_columns(df, default_lat_names, default_lon_names)
-
+    
     st.write("---")
-    st.write("### How This Works")
+    st.write("### How it works")
+    st.write("""
+    This tool augments Excel spreadsheets with proximity analysis capabilities. It requires a spreadsheet containing latitude and longitude coordinates and adds two fields:
+
+    
+    1. **Distance (Feet)**(`distance_feet`): Calculates the distance to each nearby point in feet.
+    2. **Nearby Points**(`nearby_id`): Identifies points within a specified distance threshold (default 100 feet).
+
+    The tool allows for adjustment of the distance threshold and outputs an enhanced spreadsheet with spatial proximity details for further analysis.
+    """)
+    
+    st.write("---")
+    st.write("### How to use this")
     st.write("""
     - Upload your data in the .xlsx format.
     - Select the appropriate columns for latitude, longitude, and an ID (if applicable).
