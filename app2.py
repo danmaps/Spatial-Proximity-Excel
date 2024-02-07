@@ -120,7 +120,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
 
         folium.CircleMarker(
             location=[row[lat_col], row[lon_col]],
-            radius=1,
+            radius=2,
             color=point_color,
             fill=True,
             fill_color=point_color,
@@ -137,7 +137,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
             location=[row[lat_col], row[lon_col]],
             radius=distance_threshold_meters,
             color="grey",
-            weight=1,
+            weight=2,
         ).add_to(m)
 
     # Fit the map to the bounds
