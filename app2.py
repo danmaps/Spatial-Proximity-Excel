@@ -6,20 +6,46 @@ import folium
 from folium import plugins
 from streamlit_folium import folium_static
 import os
+import numpy as np
 
+# pair programming with GPT4
 # https://chat.openai.com/c/33d6abdb-0490-4be9-b605-772e357a1489
 
+# Generate random sample data
+num_points = 50
+lat_min, lat_max = 34.047, 34.056  # latitude extent
+long_min, long_max = -117.82, -117.80  # longitude extent
+
+# Initialize a random seed in session state if it doesn't already exist
+if 'random_seed' not in st.session_state:
+    st.session_state['random_seed'] = np.random.randint(0, 100)
+
+# Use the stored random seed for reproducible randomness
+np.random.seed(st.session_state['random_seed'])
+
 sample_data = {
-    "OID"   :["1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","46","47","48","49","50",],
-    "LAT"   :[34.05412623,34.04795994,34.04881558,34.05303671,34.05346851,34.05392536,34.05220146,34.05557532,34.05357777,34.05008148,34.04766383,34.05465488,34.04894631,34.04930141,34.04935173,34.0476602,34.05350596,34.05515998,34.04800699,34.05580953,34.04975748,34.04840963,34.04794654,34.05173553,34.0495532,34.04781748,34.05117979,34.05388248,34.04739488,34.05572975,34.05326045,34.04980657,34.04984772,34.05069032,34.05076643,34.04999506,34.05132209,34.05573499,34.05020465,34.05174628,34.04988759,34.05357678,34.05322277,34.05196922,34.05497201,34.05073217,34.05169657,34.05241258,34.05294149,34.05193311,],
-    "LONG"  :[-117.8069546,-117.8112346,-117.8178003,-117.8052949,-117.8124094,-117.8186974,-117.8136555,-117.8151774,-117.8097172,-117.8189126,-117.8099321,-117.8047762,-117.8070193,-117.8100468,-117.8089111,-117.8123976,-117.8080341,-117.8105596,-117.8183508,-117.8175456,-117.8145575,-117.8070883,-117.8195574,-117.8189315,-117.8092774,-117.8150528,-117.8137767,-117.8103526,-117.8163943,-117.8178531,-117.814764,-117.8171682,-117.8094635,-117.8185242,-117.8041283,-117.8137084,-117.8137132,-117.8049981,-117.8152989,-117.8182216,-117.8054615,-117.8093202,-117.8139782,-117.8181893,-117.8064417,-117.8147823,-117.8068694,-117.8075851,-117.8076326,-117.8074113,]
+    "INDEX": [i for i in range(1, num_points + 1)],
+    "LAT": np.random.uniform(lat_min, lat_max, num_points),
+    "LONG": np.random.uniform(long_min, long_max, num_points),
 }
 
-pd.set_option('display.precision', 6) # trying to keep my coords distinct
+def handle_file_upload():
+    with st.sidebar:
+        #st.caption("Please upload a .xlsx file to get started. After uploading, select the appropriate columns and set the desired distance threshold.")
+        msg = "Choose a .xlsx file to get started. Or play around with the sample data (random points)."
+        uploaded_file = st.file_uploader(msg, type="xlsx")
+
+    if uploaded_file:
+        df = pd.read_excel(uploaded_file)
+    else:
+        df = pd.DataFrame(sample_data)  # Use sample data if no file is uploaded
+    with st.expander("About Your Spreadsheet"):
+        st.write(f"{len(df)} rows found.")
+        st.write(df.head())
+    return df, uploaded_file
 
 def find_lat_lon_columns(df):
-    lat_col = None
-    lon_col = None
+    lat_col, lon_col = None, None
 
     # Iterate over all columns in the DataFrame
     for col in df.columns:
@@ -80,7 +106,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
 
     # Add points to the map
     for _, row in gdf.iterrows():
-        # Determine the color based on the presence of a nearby_id
+        # Determine the color based on the presence of a value in distance_feet
         point_color = 'red' if pd.notnull(row['distance_feet']) else 'blue'
         tooltip_text = str(row[id_col]) if id_col and pd.notnull(row[id_col]) else 'No ID'
 
@@ -139,7 +165,7 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
                 'distance_feet': round(pm_row.geometry.distance(row.geometry) * 3.28084, 2)
             }
             if id_column:
-                nearby_point_info['nearby_id'] = pm_row[id_column]
+                nearby_point_info[f'nearby_{id_col}'] = pm_row[id_column]
             nearby_points.append(nearby_point_info)
 
     nearby_df = pd.DataFrame(nearby_points)
@@ -165,46 +191,31 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
     return merged_gdf
 
 
-def handle_file_upload():
-    with st.sidebar:
-        #st.caption("Please upload a .xlsx file to get started. After uploading, select the appropriate columns and set the desired distance threshold.")
-        msg = "Choose a .xlsx file to get started. Or play around with the sample data (50 random points around PIV)."
-        uploaded_file = st.file_uploader(msg, type="xlsx")
-
-    if uploaded_file:
-        df = pd.read_excel(uploaded_file)
-    else:
-        df = pd.DataFrame(sample_data)  # Use sample data if no file is uploaded
-    with st.expander("About Your Spreadsheet"):
-        st.write(f"{len(df)} rows found.")
-        st.write(df.head())
-    return df, uploaded_file
-
-def select_columns(df):
+def select_columns(df, uploaded_file):
     lat_col, lon_col = find_lat_lon_columns(df)
     # st.write(lat_col,lon_col)
-    if not lat_col or not lon_col:
-        st.warning("Spatial columns not detected. Select them below.", icon="⚠️")
-        lat_col = st.selectbox("Latitude Column", df.columns)
-        lon_col = st.selectbox("Longitude Column", df.columns)
-    else:
-        lat_col = st.selectbox("Latitude Column", df.columns, index=list(df.columns).index(lat_col))
-        lon_col = st.selectbox("Longitude Column", df.columns, index=list(df.columns).index(lon_col))
-    
+    if uploaded_file:
+        if not lat_col or not lon_col:
+            st.warning("Spatial columns not detected. Select them below.", icon="⚠️")
+            lat_col = st.selectbox("Latitude Column", df.columns)
+            lon_col = st.selectbox("Longitude Column", df.columns)
+        else:
+            lat_col = st.selectbox("Latitude Column", df.columns, index=list(df.columns).index(lat_col))
+            lon_col = st.selectbox("Longitude Column", df.columns, index=list(df.columns).index(lon_col))
         
-    # Provide an option to select an ID column or continue without it
+            
+        # Provide an option to select an ID column
+        id_col_options = ['None'] + list(df.columns)
+        with st.sidebar:
+            msg = "Select an ID Column. Associates each point with a unique identifier; if no `nearby_id` field is required, choose 'None'."
+            # Default to the first column in the DataFrame
+            id_col = st.selectbox(msg, options=id_col_options, index=1)
 
-    id_col_options = ['None'] + list(df.columns)
-    with st.sidebar:
-        msg = "Select an ID Column. Associates each point with a unique identifier; if no `nearby_id` field is required, choose 'None'."
-        # Default to the first column in the DataFrame
-        id_col = st.selectbox(msg, options=id_col_options, index=1)
-
-    # Check if 'None' is selected and set id_col to None
-    if id_col == 'None':
-        id_col = None
-
-
+        # Check if 'None' is selected and set id_col to None
+        if id_col == 'None':
+            id_col = None
+    else:
+        lat_col,lon_col,id_col="LAT","LONG","INDEX"
     return lat_col, lon_col, id_col
 
 def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file=None):
@@ -231,21 +242,19 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
                            data=df_xlsx,
                            file_name=file_name,
                            mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        # Display the processed DataFrame
-        st.write('Processed Data:', display_gdf)
+
         hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
         if hide_null_distance:
             # Filter out rows where 'distance_feet' is null
             display_gdf = display_gdf.dropna(subset=['distance_feet'])
         filtered_df = processed_gdf.dropna(subset=['distance_feet'])
-        
+        # Display the processed DataFrame
+        st.write('Processed Data:', display_gdf)
         if id_col:
             count = filtered_df[id_col].nunique()
             st.info(f"{count}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another.")
 
         
-
-
 # Streamlit UI
 with st.sidebar:
     '## Spatial Proximity Excel Enrichment'
@@ -278,7 +287,7 @@ with st.sidebar:
     # Now convert the chosen distance threshold in feet to meters for processing
     distance_threshold_meters = feet_to_meters(distance_threshold_feet)
     
-    lat_col, lon_col, id_col = select_columns(df)
+    lat_col, lon_col, id_col = select_columns(df, uploaded_file)
     
     "---"
     "### How it works"
