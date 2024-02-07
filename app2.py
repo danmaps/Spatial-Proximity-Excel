@@ -17,22 +17,21 @@ sample_data = {
 
 pd.set_option('display.precision', 6) # trying to keep my coords distinct
 
-# Possible column names for latitude and longitude
-default_lat_names = ['LAT', 'lat', 'latitude', 'Latitude']
-default_lon_names = ['LONG', 'long', 'longitude', 'Longitude']
-
-def find_lat_lon_columns(df, default_lat_names, default_lon_names):
+def find_lat_lon_columns(df):
     lat_col = None
     lon_col = None
 
-    for lat_name in default_lat_names:
-        if lat_name in df.columns:
-            lat_col = lat_name
-            break
+    # Iterate over all columns in the DataFrame
+    for col in df.columns:
+        col_lower = col.lower()  # Convert column name to lowercase for case-insensitive comparison
+        # Check for both full words and abbreviations
+        if ('latitude' in col_lower or 'lat' in col_lower) and not lat_col:
+            lat_col = col  # Assign the first matching latitude column
+        elif ('longitude' in col_lower or 'lon' in col_lower) and not lon_col:
+            lon_col = col  # Assign the first matching longitude column
 
-    for lon_name in default_lon_names:
-        if lon_name in df.columns:
-            lon_col = lon_name
+        # If both columns are found, no need to continue searching
+        if lat_col and lon_col:
             break
 
     return lat_col, lon_col
@@ -157,8 +156,8 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
         merged_gdf = merged_gdf.merge(df[[id_column]], left_on='index', right_index=True, how='left')
         merged_gdf.rename(columns={id_column: 'original_id'}, inplace=True)
     
-    # Drop the 'index', 'OID_y', and 'buffer' columns as they are no longer needed
-    columns_to_drop = ['index', f'{id_column}_y', 'buffer']
+    # Drop the extra 'index', 'id_col_y', and 'buffer' columns as they are no longer needed
+    columns_to_drop = ['index', f"{id_col}_y", 'buffer']
     columns_to_drop = [col for col in columns_to_drop if col in merged_gdf.columns]  # Ensure the column exists before dropping
     merged_gdf.drop(columns=columns_to_drop, inplace=True)
     merged_gdf.rename(columns={f'{id_column}_x': id_column}, inplace=True)
@@ -176,22 +175,28 @@ def handle_file_upload():
         df = pd.read_excel(uploaded_file)
     else:
         df = pd.DataFrame(sample_data)  # Use sample data if no file is uploaded
-    with st.expander("Data Preview"):
+    with st.expander("About Your Spreadsheet"):
+        st.write(f"{len(df)} rows found.")
         st.write(df.head())
     return df, uploaded_file
 
-def select_columns(df, default_lat_names, default_lon_names):
-    lat_col, lon_col = find_lat_lon_columns(df, default_lat_names, default_lon_names)
+def select_columns(df):
+    lat_col, lon_col = find_lat_lon_columns(df)
+    # st.write(lat_col,lon_col)
     if not lat_col or not lon_col:
-        st.error("Could not find default latitude and longitude columns. Please select the columns.")
-        lat_col = st.selectbox("Select Latitude Column", df.columns)
-        lon_col = st.selectbox("Select Longitude Column", df.columns)
-
+        st.warning("Spatial columns not detected. Select them below.", icon="⚠️")
+        lat_col = st.selectbox("Latitude Column", df.columns)
+        lon_col = st.selectbox("Longitude Column", df.columns)
+    else:
+        lat_col = st.selectbox("Latitude Column", df.columns, index=list(df.columns).index(lat_col))
+        lon_col = st.selectbox("Longitude Column", df.columns, index=list(df.columns).index(lon_col))
+    
+        
     # Provide an option to select an ID column or continue without it
 
     id_col_options = ['None'] + list(df.columns)
     with st.sidebar:
-        msg = "Select an ID Column from the dropdown to associate each point with a unique identifier; if no ID is required for your analysis, you may choose 'None'. This controls whether a `nearby_id` field is included in the output."
+        msg = "Select an ID Column. Associates each point with a unique identifier; if no `nearby_id` field is required, choose 'None'."
         # Default to the first column in the DataFrame
         id_col = st.selectbox(msg, options=id_col_options, index=1)
 
@@ -206,39 +211,44 @@ def process_and_display(df, lat_col, lon_col, id_col, distance_threshold_meters,
     if lat_col and lon_col:
         processed_gdf = process_data(df, lat_col, lon_col, distance_threshold_meters, id_col)
         display_gdf = processed_gdf.drop(columns=['geometry'])
-        hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
 
-        if hide_null_distance:
-            # Filter out rows where 'distance_feet' is null
-            display_gdf = display_gdf.dropna(subset=['distance_feet'])
-
-        # Display the processed DataFrame
-        st.write('Processed Data:', display_gdf)
-        filtered_df = processed_gdf.dropna(subset=['distance_feet'])
-        
-        if id_col:
-            count = filtered_df[id_col].nunique()
-            st.write(f"{count}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another.")
-        
-        # Convert to Excel and offer download
-        df_xlsx = convert_df_to_excel(display_gdf)
-        file_name = 'processed_data.xlsx'
-        if uploaded_file:
-            file_name = f"{os.path.splitext(uploaded_file.name)[0]}_{int(distance_threshold_meters * 3.28084)}ft.xlsx"
-        st.download_button(label='📥 Download Result',
-                           data=df_xlsx,
-                           file_name=file_name,
-                           mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        
-        # Create and display the map with Folium
+        # Create and display the map
         folium_map = create_folium_map(processed_gdf, distance_threshold_meters, lat_col, lon_col)
         folium_static(folium_map)
         if id_col:
             st.caption(f"Hover/click on points to view {id_col}")
+            # Convert to Excel and offer download
+        df_xlsx = convert_df_to_excel(display_gdf)
+        
+        if uploaded_file:
+            short_file_name = os.path.splitext(uploaded_file.name)[0]
+        else:
+            short_file_name = "sample_data"
+
+        file_name = f"{short_file_name}_{int(distance_threshold_meters * 3.28084)}ft.xlsx"
+
+        st.download_button(label=f'📥 Download {file_name}',
+                           data=df_xlsx,
+                           file_name=file_name,
+                           mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        # Display the processed DataFrame
+        st.write('Processed Data:', display_gdf)
+        hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
+        if hide_null_distance:
+            # Filter out rows where 'distance_feet' is null
+            display_gdf = display_gdf.dropna(subset=['distance_feet'])
+        filtered_df = processed_gdf.dropna(subset=['distance_feet'])
+        
+        if id_col:
+            count = filtered_df[id_col].nunique()
+            st.info(f"{count}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another.")
+
+        
+
 
 # Streamlit UI
 with st.sidebar:
-    st.title('Spatial Proximity Excel Enrichment')
+    '## Spatial Proximity Excel Enrichment'
 
     df, uploaded_file = handle_file_upload()
         
@@ -268,7 +278,7 @@ with st.sidebar:
     # Now convert the chosen distance threshold in feet to meters for processing
     distance_threshold_meters = feet_to_meters(distance_threshold_feet)
     
-    lat_col, lon_col, id_col = select_columns(df, default_lat_names, default_lon_names)
+    lat_col, lon_col, id_col = select_columns(df)
     
     st.write("---")
     st.write("### How it works")
