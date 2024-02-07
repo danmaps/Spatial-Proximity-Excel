@@ -351,7 +351,7 @@ with st.sidebar:
     - The data is processed automatically. You should see the results on the map and can download the output .xlsx file.
     """
     """
-    If you have any problems [email Danny](mailto:daniel.mcvey@sce.com).
+    Questions? Problems? Praise? You can [email Danny](mailto:daniel.mcvey@sce.com).
     """
     with st.expander("How it was made"):
         """
