@@ -11,6 +11,12 @@ import numpy as np
 # pair programming with GPT4
 # https://chat.openai.com/c/33d6abdb-0490-4be9-b605-772e357a1489
 
+st.set_page_config(
+    page_title="Spatial Proximity Excel Enrichment",
+    page_icon=":world_map:️",
+    layout="wide",
+)
+
 # Generate random sample data
 num_points = 50
 lat_min, lat_max = 34.047, 34.056  # latitude extent
@@ -108,12 +114,12 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
     # st.write(bounds)
 
     # Start with a base map (zoom start will be adjusted with fit_bounds)
-    m = folium.Map()
+    m = folium.Map(tiles="cartodb-dark-matter")
 
     # Add points to the map
     for _, row in gdf.iterrows():
         # Determine the color based on the presence of a value in distance_feet
-        point_color = "red" if pd.notnull(row["distance_feet"]) else "black"
+        point_color = "red" if pd.notnull(row["distance_feet"]) else "white"
         tooltip_text = (
             str(row[id_col]) if id_col and pd.notnull(row[id_col]) else "No ID"
         )
