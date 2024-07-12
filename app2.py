@@ -18,7 +18,7 @@ st.set_page_config(
 )
 
 # Generate random sample data
-num_points = 10
+num_points = 100
 lat_min, lat_max = 34.047, 34.056  # latitude extent
 long_min, long_max = -117.82, -117.80  # longitude extent
 
@@ -245,7 +245,7 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
     return merged_gdf
 
 
-def identify_clusters(df, sum_col, cluster_threshold):
+def identify_clusters(df, id_col, sum_col):
     """
     Assigns a group_id to each row based on nearby points.
 
@@ -288,29 +288,28 @@ def identify_clusters(df, sum_col, cluster_threshold):
 
     # Assign a group_id to each row based on nearby points
     for i, row in df.iterrows():
-        if pd.notna(row['nearby_INDEX']):
-            nearby_index = int(row['nearby_INDEX'])
-            if row['INDEX'] in group_dict:
-                group_id = group_dict[row['INDEX']]
+        nearby_index_col = f'nearby_{id_col}'
+        if pd.notna(row[nearby_index_col]):
+            nearby_index = row[nearby_index_col]
+            if row[id_col] in group_dict:
+                group_id = group_dict[row[id_col]]
             else:
                 group_id = get_or_create_group_id(nearby_index)
             df.at[i, 'group_id'] = group_id
-            group_dict[row['INDEX']] = group_id
+            group_dict[row[id_col]] = group_id
 
-    # drop duplicates based on index
-    df = df.drop_duplicates(subset=['INDEX'])
+    # drop duplicates based on id_col
+    df = df.drop_duplicates(subset=[id_col])
 
     # Add a 'group_sum' column to the DataFrame
-    df['group_sum'] = np.nan
+    df['group_sum'] = np.nan # this is renamed at the end to "group_{sum_col}"
 
     # Assign a group_sum to each group
-    for group_id in group_dict:
+    unique_group_ids = df['group_id'].dropna().unique()
+    for group_id in unique_group_ids:
         group_sum = df.loc[df['group_id'] == group_id, sum_col].sum()
         df.loc[df['group_id'] == group_id, 'group_sum'] = group_sum
 
-    # drop groups under the threshold
-    # df = df[df['group_sum'] >= cluster_threshold]
-    
     return df
 
 
@@ -347,7 +346,7 @@ def select_columns(df, uploaded_file):
     sum_col = st.sidebar.selectbox(
         "Select a Sum Column",
         df.columns,
-        index=df.columns.get_loc("QUANTITY"),
+        # index=df.columns.get_loc("QUANTITY"),
     )
     return lat_col, lon_col, id_col, sum_col
 
@@ -374,7 +373,7 @@ def process_and_display(
             df, lat_col, lon_col, distance_threshold_meters, id_col
         )
 
-        processed_gdf = identify_clusters(processed_gdf, "QUANTITY", 1000)
+        processed_gdf = identify_clusters(processed_gdf, id_col, sum_col)
         display_gdf = processed_gdf.drop(columns=["geometry"])
 
         # Create and display the map
@@ -417,7 +416,7 @@ def process_and_display(
 
         # Rename group_sum column to f"group_{sum_col}"
         display_gdf = display_gdf.rename(columns={"group_sum": f"group_{sum_col}"})
-        
+
         # Display the processed DataFrame
         st.write("Processed Data:", display_gdf)
         if id_col:
@@ -439,7 +438,7 @@ with st.sidebar:
         "Distance threshold in feet",
         min_value=25,
         max_value=800,
-        value=800,  # default value
+        value=100,  # default value
         step=25,
         format="%d feet",
     )
