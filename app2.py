@@ -162,6 +162,28 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
 
 # Main processing function
 def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
+    """
+    Processes a DataFrame to find nearby points based on a given distance threshold.
+
+    Args:
+        df (pandas.DataFrame): The input DataFrame.
+        lat_col (str): The name of the column containing the latitude values.
+        lon_col (str): The name of the column containing the longitude values.
+        distance_threshold (float): The maximum distance (in meters) between two points to be considered nearby.
+        id_column (str, optional): The name of the column containing the unique identifier for each point. Defaults to None.
+
+    Returns:
+        pandas.DataFrame: The merged DataFrame containing the original points and their nearby points, along with the distance between them.
+
+    Raises:
+        None.
+
+    Notes:
+        - The input DataFrame is expected to have columns named 'lat_col' and 'lon_col' containing the latitude and longitude values.
+        - If 'id_column' is provided, the resulting DataFrame will also contain the corresponding 'id_column' values.
+        - The resulting DataFrame will have columns named 'index', 'nearby_id', and 'distance_feet'.
+        - If no points are found within the specified distance threshold, a warning message is displayed and an empty DataFrame is returned.
+    """
     # Convert DataFrame to GeoDataFrame
     gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[lon_col], df[lat_col]))
     gdf = gdf.set_crs(epsg=4326)
@@ -219,6 +241,44 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
     return merged_gdf
 
 
+def identify_clusters(df, id_column, lat_col, lon_col, distance_threshold, sum_col, cluster_threshold, ):
+    """
+    Identifies clusters in a DataFrame based on proximity between points and sum of a specified column.
+
+    Args:
+        df (pandas.DataFrame): Input merged_gdf DataFrame from the process_data() function.
+        id_column (str): The name of the column containing the unique identifier for each point.
+        lat_col (str): The name of the column containing the latitude values.
+        lon_col (str): The name of the column containing the longitude values.
+        distance_threshold (float): The maximum distance (in meters) between two points to be considered nearby.
+        sum_col (str): The name of the column containing the sum of values to be used for clustering.
+        cluster_threshold (float): The minimum sum of values required to be considered a cluster.
+
+    Returns:
+        pandas.DataFrame: The DataFrame with additional columns indicating which points belong to which clusters.
+    """
+
+    return
+
+
+def min_bounding_geometry_circle(df, id_column, lat_col, lon_col, group_column):
+    """
+    Calculates the minimum bounding geometry (circle) of a group of points in a DataFrame.
+
+    Args:
+        df (pandas.DataFrame): Input DataFrame.
+        id_column (str): The name of the column containing the unique identifier for each point.
+        lat_col (str): The name of the column containing the latitude values.
+        lon_col (str): The name of the column containing the longitude values.
+        group_column (str): The name of the column containing the group membership for each point.
+    """
+
+    return
+
+
+
+
+
 def select_columns(df, uploaded_file):
     lat_col, lon_col = find_lat_lon_columns(df)
     if uploaded_file:  # skip if using sample data
@@ -252,6 +312,20 @@ def select_columns(df, uploaded_file):
 def process_and_display(
     df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file=None
 ):
+    """
+    Process and display spatial proximity analysis results.
+
+    Parameters:
+        df (DataFrame): The input DataFrame containing latitude, longitude, and other data.
+        lat_col (str): The column name for latitude values.
+        lon_col (str): The column name for longitude values.
+        id_col (str): The column name to uniquely identify each point.
+        distance_threshold_meters (float): The distance threshold in meters to identify nearby points.
+        uploaded_file (file, optional): The uploaded Excel file for processing.
+
+    Returns:
+        None
+    """
     if lat_col and lon_col:
         processed_gdf = process_data(
             df, lat_col, lon_col, distance_threshold_meters, id_col
