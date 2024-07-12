@@ -18,7 +18,7 @@ st.set_page_config(
 )
 
 # Generate random sample data
-num_points = 50
+num_points = 10
 lat_min, lat_max = 34.047, 34.056  # latitude extent
 long_min, long_max = -117.82, -117.80  # longitude extent
 
@@ -33,6 +33,7 @@ sample_data = {
     "INDEX": [i for i in range(1, num_points + 1)],
     "LAT": np.random.uniform(lat_min, lat_max, num_points),
     "LONG": np.random.uniform(long_min, long_max, num_points),
+    "QUANTITY": np.random.randint(100, 1000, num_points),
 }
 
 
@@ -216,6 +217,9 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
 
     nearby_df = pd.DataFrame(nearby_points)
 
+
+
+
     # Check if nearby_df is empty, if so, create an empty DataFrame with the 'index' column
     if nearby_df.empty:
         nearby_df = pd.DataFrame(columns=["index", "nearby_id", "distance_feet"])
@@ -241,41 +245,73 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
     return merged_gdf
 
 
-def identify_clusters(df, id_column, lat_col, lon_col, distance_threshold, sum_col, cluster_threshold, ):
+def identify_clusters(df, sum_col, cluster_threshold):
     """
-    Identifies clusters in a DataFrame based on proximity between points and sum of a specified column.
+    Assigns a group_id to each row based on nearby points.
 
     Args:
-        df (pandas.DataFrame): Input merged_gdf DataFrame from the process_data() function.
+        df (pd.DataFrame): The input DataFrame.
         id_column (str): The name of the column containing the unique identifier for each point.
-        lat_col (str): The name of the column containing the latitude values.
-        lon_col (str): The name of the column containing the longitude values.
-        distance_threshold (float): The maximum distance (in meters) between two points to be considered nearby.
-        sum_col (str): The name of the column containing the sum of values to be used for clustering.
-        cluster_threshold (float): The minimum sum of values required to be considered a cluster.
+        distance_threshold (float): The maximum distance (in feet) between two points to be considered nearby.
+        sum_col (str): The name of the column containing the values to be summed for each group.
+        cluster_threshold (int): The minimum number of points required to form a cluster.
 
     Returns:
-        pandas.DataFrame: The DataFrame with additional columns indicating which points belong to which clusters.
+        pd.DataFrame: The input DataFrame with an additional 'group_id' column.
     """
 
-    return
+    group_dict = {}
+    current_group_id = 0
 
+    def get_or_create_group_id(idx):
+        """
+        Returns the group_id for the given index.
 
-def min_bounding_geometry_circle(df, id_column, lat_col, lon_col, group_column):
-    """
-    Calculates the minimum bounding geometry (circle) of a group of points in a DataFrame.
+        If the index is not in the group_dict, creates a new group_id and adds it to the group_dict.
 
-    Args:
-        df (pandas.DataFrame): Input DataFrame.
-        id_column (str): The name of the column containing the unique identifier for each point.
-        lat_col (str): The name of the column containing the latitude values.
-        lon_col (str): The name of the column containing the longitude values.
-        group_column (str): The name of the column containing the group membership for each point.
-    """
+        Args:
+            idx (int): The index to get or create the group_id for.
 
-    return
+        Returns:
+            int: The group_id for the given index.
+        """
+        nonlocal current_group_id
+        if idx in group_dict:
+            return group_dict[idx]
+        else:
+            group_dict[idx] = current_group_id
+            current_group_id += 1
+            return group_dict[idx]
 
+    # Add a 'group_id' column to the DataFrame
+    df['group_id'] = np.nan
 
+    # Assign a group_id to each row based on nearby points
+    for i, row in df.iterrows():
+        if pd.notna(row['nearby_INDEX']):
+            nearby_index = int(row['nearby_INDEX'])
+            if row['INDEX'] in group_dict:
+                group_id = group_dict[row['INDEX']]
+            else:
+                group_id = get_or_create_group_id(nearby_index)
+            df.at[i, 'group_id'] = group_id
+            group_dict[row['INDEX']] = group_id
+
+    # drop duplicates based on index
+    df = df.drop_duplicates(subset=['INDEX'])
+
+    # Add a 'group_sum' column to the DataFrame
+    df['group_sum'] = np.nan
+
+    # Assign a group_sum to each group
+    for group_id in group_dict:
+        group_sum = df.loc[df['group_id'] == group_id, sum_col].sum()
+        df.loc[df['group_id'] == group_id, 'group_sum'] = group_sum
+
+    # drop groups under the threshold
+    # df = df[df['group_sum'] >= cluster_threshold]
+    
+    return df
 
 
 
@@ -306,7 +342,14 @@ def select_columns(df, uploaded_file):
             id_col = None
     else:  # use hardcoded sample data values
         lat_col, lon_col, id_col = "LAT", "LONG", "INDEX"
-    return lat_col, lon_col, id_col
+
+    # Provide an option to select a sum column
+    sum_col = st.sidebar.selectbox(
+        "Select a Sum Column",
+        df.columns,
+        index=df.columns.get_loc("QUANTITY"),
+    )
+    return lat_col, lon_col, id_col, sum_col
 
 
 def process_and_display(
@@ -330,6 +373,8 @@ def process_and_display(
         processed_gdf = process_data(
             df, lat_col, lon_col, distance_threshold_meters, id_col
         )
+
+        processed_gdf = identify_clusters(processed_gdf, "QUANTITY", 1000)
         display_gdf = processed_gdf.drop(columns=["geometry"])
 
         # Create and display the map
@@ -345,7 +390,7 @@ def process_and_display(
                         Points nearby (within {distance_threshold_feet}ft) others are red.
                        """
             )
-            # Convert to Excel and offer download
+        # Convert to Excel and offer download
         df_xlsx = convert_df_to_excel(display_gdf)
 
         if uploaded_file:
@@ -369,6 +414,10 @@ def process_and_display(
             # Filter out rows where 'distance_feet' is null
             display_gdf = display_gdf.dropna(subset=["distance_feet"])
         filtered_df = processed_gdf.dropna(subset=["distance_feet"])
+
+        # Rename group_sum column to f"group_{sum_col}"
+        display_gdf = display_gdf.rename(columns={"group_sum": f"group_{sum_col}"})
+        
         # Display the processed DataFrame
         st.write("Processed Data:", display_gdf)
         if id_col:
@@ -376,6 +425,7 @@ def process_and_display(
             st.info(
                 f"{count}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another."
             )
+        
 
 
 # Streamlit UI
@@ -389,7 +439,7 @@ with st.sidebar:
         "Distance threshold in feet",
         min_value=25,
         max_value=800,
-        value=100,  # default value
+        value=800,  # default value
         step=25,
         format="%d feet",
     )
@@ -412,7 +462,7 @@ with st.sidebar:
     # Now convert the chosen distance threshold in feet to meters for processing
     distance_threshold_meters = feet_to_meters(distance_threshold_feet)
 
-    lat_col, lon_col, id_col = select_columns(df, uploaded_file)
+    lat_col, lon_col, id_col, sum_col = select_columns(df, uploaded_file)
 
     "---"
     "### How it works"
