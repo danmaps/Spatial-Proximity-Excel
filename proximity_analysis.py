@@ -8,19 +8,11 @@ from streamlit_folium import folium_static
 import os
 import numpy as np
 
-# pair programming with GPT4
-# https://chat.openai.com/c/33d6abdb-0490-4be9-b605-772e357a1489
-
 st.set_page_config(
     page_title="Spatial Proximity Excel Enrichment",
     page_icon=":world_map:️",
     layout="wide",
 )
-
-def store_value(key):
-    st.session_state[key] = st.session_state["_"+key]
-def load_value(key):
-    st.session_state["_"+key] = st.session_state[key]
 
 # Generate random sample data
 num_points = 100
@@ -449,10 +441,7 @@ with st.sidebar:
         max_value=800,
         value=100,  # default value
         step=25,
-        format="%d feet",
-        key="_distance",
-        on_change=store_value,
-        args=["distance"]
+        format="%d feet"
     )
 
     # Define a number input for custom distance thresholds
@@ -463,10 +452,7 @@ with st.sidebar:
             distance_threshold_feet
         ),  # set the default value to the slider's value
         step=10.0,
-        format="%f",
-        key="_custom_distance",
-        on_change=store_value,
-        args=["custom_distance"]
+        format="%f"
     )
 
     # Choose which value to use based on whether the custom value differs from the slider
