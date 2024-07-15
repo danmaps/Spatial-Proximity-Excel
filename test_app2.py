@@ -1,7 +1,7 @@
 import pandas as pd
 import geopandas as gpd
 import pytest
-from app2 import process_data
+from proximity_main_page import process_data
 
 @pytest.fixture
 def sample_df():
