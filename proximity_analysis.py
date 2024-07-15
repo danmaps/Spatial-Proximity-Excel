@@ -257,9 +257,7 @@ def identify_clusters(df, id_col, sum_col):
     Args:
         df (pd.DataFrame): The input DataFrame.
         id_column (str): The name of the column containing the unique identifier for each point.
-        distance_threshold (float): The maximum distance (in feet) between two points to be considered nearby.
         sum_col (str): The name of the column containing the values to be summed for each group.
-        cluster_threshold (int): The minimum number of points required to form a cluster.
 
     Returns:
         pd.DataFrame: The input DataFrame with an additional 'group_id' column.
@@ -289,6 +287,7 @@ def identify_clusters(df, id_col, sum_col):
             return group_dict[idx]
 
     # Add a 'group_id' column to the DataFrame
+    df = df.copy()
     df['group_id'] = np.nan
 
     # Assign a group_id to each row based on nearby points
@@ -300,14 +299,14 @@ def identify_clusters(df, id_col, sum_col):
                 group_id = group_dict[row[id_col]]
             else:
                 group_id = get_or_create_group_id(nearby_index)
-            df.at[i, 'group_id'] = group_id
+            df.loc[i, 'group_id'] = group_id
             group_dict[row[id_col]] = group_id
 
     # drop duplicates based on id_col
     df = df.drop_duplicates(subset=[id_col])
 
     # Add a 'group_sum' column to the DataFrame
-    df['group_sum'] = np.nan # this is renamed at the end to "group_{sum_col}"st
+    df['group_sum'] = np.nan # this is renamed at the end to "group_{sum_col}"
 
     # Assign a group_sum to each group
     unique_group_ids = df['group_id'].dropna().unique()
