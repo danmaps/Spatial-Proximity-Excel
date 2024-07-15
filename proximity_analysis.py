@@ -17,6 +17,11 @@ st.set_page_config(
     layout="wide",
 )
 
+def store_value(key):
+    st.session_state[key] = st.session_state["_"+key]
+def load_value(key):
+    st.session_state["_"+key] = st.session_state[key]
+
 # Generate random sample data
 num_points = 100
 lat_min, lat_max = 34.047, 34.056  # latitude extent
@@ -425,13 +430,17 @@ def process_and_display(
             st.info(
                 f"{count}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another."
             )
+
+
         
 
 
 # Streamlit UI
-with st.sidebar:
-    "## Spatial Proximity Excel Enrichment"
+            
+"## Spatial Proximity Excel Enrichment"
 
+with st.sidebar:
+    
     df, uploaded_file = handle_file_upload()
 
     # Define a slider for distance selection
@@ -442,6 +451,9 @@ with st.sidebar:
         value=100,  # default value
         step=25,
         format="%d feet",
+        key="_distance",
+        on_change=store_value,
+        args=["distance"]
     )
 
     # Define a number input for custom distance thresholds
@@ -453,6 +465,9 @@ with st.sidebar:
         ),  # set the default value to the slider's value
         step=10.0,
         format="%f",
+        key="_custom_distance",
+        on_change=store_value,
+        args=["custom_distance"]
     )
 
     # Choose which value to use based on whether the custom value differs from the slider
