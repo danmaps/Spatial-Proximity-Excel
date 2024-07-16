@@ -7,6 +7,7 @@ from folium import plugins
 from streamlit_folium import folium_static
 import os
 import numpy as np
+from shapely.geometry import Point
 
 st.set_page_config(
     page_title="Spatial Proximity Excel Enrichment",
@@ -100,42 +101,47 @@ def get_bounds(gdf_with_buffers):
     return [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
 
 
-def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
+def get_bounds(gdf):
+    bounds = gdf.total_bounds
+    return [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
+
+def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     # Remove rows where lat or lon is NaN
     gdf = gdf.dropna(subset=[lat_col, lon_col])
+
+    # Convert geometries to centroids if they are not already points
+    gdf['geometry'] = gdf['geometry'].apply(lambda geom: geom.centroid if not isinstance(geom, Point) else geom)
 
     # Generate buffers and calculate bounds
     gdf["buffer"] = gdf.apply(
         lambda row: row.geometry.buffer(distance_threshold_meters), axis=1
     )
     bounds = get_bounds(gdf)
-    # st.write(bounds)
 
     # Start with a base map (zoom start will be adjusted with fit_bounds)
     m = folium.Map(tiles="cartodb-dark-matter")
 
+    # Create a FeatureGroup for the searchable locations
+    fg = folium.FeatureGroup(name="Search Locations").add_to(m)
+
     # Add points to the map
     for _, row in gdf.iterrows():
-        # Determine the color based on the presence of a value in distance_feet
-        # st.write(row)
         point_color = "red" if pd.notnull(row["distance_feet"]) else "white"
         tooltip_text = (
             str(row[id_col]) if id_col and pd.notnull(row[id_col]) else "No ID"
         )
 
-        folium.CircleMarker(
+        marker = folium.CircleMarker(
             location=[row[lat_col], row[lon_col]],
             radius=2,
             color=point_color,
             fill=True,
             fill_color=point_color,
-            fill_opacity=1,  # Set fill opacity to 1 for a solid color
+            fill_opacity=1,
             weight=2,
-            tooltip=tooltip_text,  # Add tooltip to the marker
-            popup=folium.Popup(
-                tooltip_text, parse_html=True
-            ),  # Add popup to the marker
-        ).add_to(m)
+            tooltip=tooltip_text,
+            popup=folium.Popup(tooltip_text, parse_html=True),
+        ).add_to(fg)
 
         # Add buffers to the map
         folium.Circle(
@@ -156,6 +162,14 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
         force_separate_button=True,
     ).add_to(m)
 
+    # Add the search functionality
+    search = plugins.Search(
+        position="topright",
+        layer=fg,
+        search_label=id_col,
+        placeholder="Search for ID",
+        collapsed=False,
+    ).add_to(m)
     return m
 
 
@@ -310,18 +324,19 @@ def identify_clusters(df, id_col, display_id, sum_col):
     if display_id or id_col:
         # Use display_id if available, otherwise fall back to id_col
         col_to_use = display_id if display_id else id_col
-
+        
         # Assign a group_id to each row based on nearby points
         for i, row in df.iterrows():
             nearby_index_col = f"nearby_{col_to_use}"
-            if pd.notna(row[nearby_index_col]):
-                nearby_index = row[nearby_index_col]
-                if row[id_col] in group_dict:
-                    group_id = group_dict[row[id_col]]
-                else:
-                    group_id = get_or_create_group_id(nearby_index)
-                df.loc[i, "group_id"] = group_id
-                group_dict[row[id_col]] = group_id
+            if nearby_index_col in df.columns:
+                if pd.notna(row[nearby_index_col]):
+                    nearby_index = row[nearby_index_col]
+                    if row[id_col] in group_dict:
+                        group_id = group_dict[row[id_col]]
+                    else:
+                        group_id = get_or_create_group_id(nearby_index)
+                    df.loc[i, "group_id"] = group_id
+                    group_dict[row[id_col]] = group_id
 
     else:
         # drop group_id column and return the DataFrame
@@ -447,7 +462,7 @@ def process_and_display(
         # Create and display the map
         folium_static(
             create_folium_map(
-                processed_gdf, distance_threshold_meters, lat_col, lon_col
+                processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
             )
         )
 
