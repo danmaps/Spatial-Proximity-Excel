@@ -109,39 +109,53 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     # Remove rows where lat or lon is NaN
     gdf = gdf.dropna(subset=[lat_col, lon_col])
 
-    # Convert geometries to centroids if they are not already points
-    gdf['geometry'] = gdf['geometry'].apply(lambda geom: geom.centroid if not isinstance(geom, Point) else geom)
-
-    # Generate buffers and calculate bounds
-    gdf["buffer"] = gdf.apply(
-        lambda row: row.geometry.buffer(distance_threshold_meters), axis=1
-    )
+    # calculate bounds
     bounds = get_bounds(gdf)
 
     # Start with a base map (zoom start will be adjusted with fit_bounds)
     m = folium.Map(tiles="cartodb-dark-matter")
 
-    # Create a FeatureGroup for the searchable locations
-    fg = folium.FeatureGroup(name="Search Locations").add_to(m)
+    # Create a GeoJson layer
+    geojson_layer = folium.GeoJson(
+        gdf,
+        popup=folium.GeoJsonPopup(fields=[display_id, id_col, sum_col], localize=True),
+        tooltip=folium.GeoJsonTooltip(
+            fields=[display_id, id_col, sum_col], localize=True
+        ),
+        # grey if distance_feet is null, red if not
+        marker=folium.Marker(
+            icon=folium.Icon(
+                icon="database", prefix='fa', color="red"),
+            ),
+    ).add_to(m)
 
-    # Add points to the map
+    # Add search functionality
+    search = folium.plugins.Search(
+        layer=geojson_layer,
+        geom_type="Point",
+        placeholder="Search for ID",
+        collapsed=False,
+        search_label=id_col,
+    ).add_to(m)
+
+    # Add points and buffers to the map
     for _, row in gdf.iterrows():
         point_color = "red" if pd.notnull(row["distance_feet"]) else "white"
         tooltip_text = (
             str(row[id_col]) if id_col and pd.notnull(row[id_col]) else "No ID"
         )
 
-        marker = folium.CircleMarker(
-            location=[row[lat_col], row[lon_col]],
-            radius=2,
-            color=point_color,
-            fill=True,
-            fill_color=point_color,
-            fill_opacity=1,
-            weight=2,
-            tooltip=tooltip_text,
-            popup=folium.Popup(tooltip_text, parse_html=True),
-        ).add_to(fg)
+        # folium.CircleMarker(
+        #     location=[row[lat_col], row[lon_col]],
+        #     radius=2,
+        #     color=point_color,
+        #     fill=True,
+        #     fill_color=point_color,
+        #     fill_opacity=1,
+        #     weight=2,
+        #     tooltip=tooltip_text,
+        #     popup=folium.Popup(tooltip_text, parse_html=True),
+        # ).add_to(m)
 
         # Add buffers to the map
         folium.Circle(
@@ -162,14 +176,6 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         force_separate_button=True,
     ).add_to(m)
 
-    # Add the search functionality
-    search = plugins.Search(
-        position="topright",
-        layer=fg,
-        search_label=id_col,
-        placeholder="Search for ID",
-        collapsed=False,
-    ).add_to(m)
     return m
 
 
