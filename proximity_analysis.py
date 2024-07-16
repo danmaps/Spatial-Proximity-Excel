@@ -115,6 +115,10 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     # Start with a base map (zoom start will be adjusted with fit_bounds)
     m = folium.Map(tiles="cartodb-dark-matter")
 
+    # Exclude columns with non-serializable data types
+    non_serializable_cols = gdf.select_dtypes(include=['datetime64[ns]', 'timedelta64[ns]', 'period[Q]']).columns
+    gdf = gdf.drop(columns=non_serializable_cols)
+    
     # Create a GeoJson layer
     geojson_layer = folium.GeoJson(
         gdf,
@@ -122,7 +126,6 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         tooltip=folium.GeoJsonTooltip(
             fields=[display_id, id_col, sum_col], localize=True
         ),
-        # grey if distance_feet is null, red if not
         marker=folium.Marker(
             icon=folium.Icon(
                 icon="database", prefix='fa', color="red"),
@@ -133,7 +136,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     search = folium.plugins.Search(
         layer=geojson_layer,
         geom_type="Point",
-        placeholder="Search for ID",
+        placeholder=f"Search for {id_col}",
         collapsed=False,
         search_label=id_col,
     ).add_to(m)
@@ -337,12 +340,12 @@ def identify_clusters(df, id_col, display_id, sum_col):
             if nearby_index_col in df.columns:
                 if pd.notna(row[nearby_index_col]):
                     nearby_index = row[nearby_index_col]
-                    if row[id_col] in group_dict:
-                        group_id = group_dict[row[id_col]]
+                    if row[col_to_use] in group_dict:
+                        group_id = group_dict[row[col_to_use]]
                     else:
                         group_id = get_or_create_group_id(nearby_index)
                     df.loc[i, "group_id"] = group_id
-                    group_dict[row[id_col]] = group_id
+                    group_dict[row[col_to_use]] = group_id
 
     else:
         # drop group_id column and return the DataFrame
