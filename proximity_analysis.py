@@ -117,6 +117,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
     # Add points to the map
     for _, row in gdf.iterrows():
         # Determine the color based on the presence of a value in distance_feet
+        # st.write(row)
         point_color = "red" if pd.notnull(row["distance_feet"]) else "white"
         tooltip_text = (
             str(row[id_col]) if id_col and pd.notnull(row[id_col]) else "No ID"
@@ -159,7 +160,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col):
 
 
 # Main processing function
-def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
+def process_data(df, lat_col, lon_col, distance_threshold, id_column=None, display_id=None):
     """
     Processes a DataFrame to find nearby points based on a given distance threshold.
 
@@ -169,6 +170,7 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
         lon_col (str): The name of the column containing the longitude values.
         distance_threshold (float): The maximum distance (in meters) between two points to be considered nearby.
         id_column (str, optional): The name of the column containing the unique identifier for each point. Defaults to None.
+        display_id (str, optional): The name of the column containing the display identifier for each point. Defaults to None.
 
     Returns:
         pandas.DataFrame: The merged DataFrame containing the original points and their nearby points, along with the distance between them.
@@ -208,14 +210,14 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
                     pm_row.geometry.distance(row.geometry) * 3.28084, 2
                 ),
             }
+            if display_id:
+                nearby_point_info[f"nearby_{display_id}"] = pm_row[display_id]
+
             if id_column:
-                nearby_point_info[f"nearby_{id_col}"] = pm_row[id_column]
+                nearby_point_info[f"nearby_{id_column}"] = pm_row[id_column]
             nearby_points.append(nearby_point_info)
 
     nearby_df = pd.DataFrame(nearby_points)
-
-
-
 
     # Check if nearby_df is empty, if so, create an empty DataFrame with the 'index' column
     if nearby_df.empty:
@@ -231,18 +233,23 @@ def process_data(df, lat_col, lon_col, distance_threshold, id_column=None):
         )
         merged_gdf.rename(columns={id_column: "original_id"}, inplace=True)
 
-    # Drop the extra 'index', 'id_col_y', and 'buffer' columns as they are no longer needed
-    columns_to_drop = ["index", f"{id_col}_y", "buffer"]
+    # Drop  extra columns
+    columns_to_drop = ["index", f"{id_col}_y", f"{display_id}_y", "buffer", f"nearby_{display_id}_y", f"nearby_{id_column}_y", "distance_feet_y"]
     columns_to_drop = [
         col for col in columns_to_drop if col in merged_gdf.columns
     ]  # Ensure the column exists before dropping
     merged_gdf.drop(columns=columns_to_drop, inplace=True)
+    
+    merged_gdf.rename(columns={f"{display_id}_x": display_id}, inplace=True)
     merged_gdf.rename(columns={f"{id_column}_x": id_column}, inplace=True)
-
+    merged_gdf.rename(columns={f"nearby_{id_column}_x": f"nearby_{id_column}"}, inplace=True)
+    merged_gdf.rename(columns={f"nearby_{display_id}_x": f"nearby_{display_id}"}, inplace=True)
+    merged_gdf.rename(columns={f"distance_feet_x": "distance_feet"}, inplace=True)
+    
     return merged_gdf
 
 
-def identify_clusters(df, id_col, sum_col):
+def identify_clusters(df, id_col, display_id, sum_col):
     """
     Assigns a group_id to each row based on nearby points.
 
@@ -278,24 +285,38 @@ def identify_clusters(df, id_col, sum_col):
             current_group_id += 1
             return group_dict[idx]
 
-    # drop duplicates based on id_col
-    df = df.drop_duplicates(subset=[id_col])
+    # # drop duplicates based on id_col
+    # df = df.drop_duplicates(subset=[id_col])
 
     # Add a 'group_id' column to the DataFrame
     df = df.copy()
     df['group_id'] = np.nan
 
-    # Assign a group_id to each row based on nearby points
-    for i, row in df.iterrows():
-        nearby_index_col = f'nearby_{id_col}'
-        if pd.notna(row[nearby_index_col]):
-            nearby_index = row[nearby_index_col]
-            if row[id_col] in group_dict:
-                group_id = group_dict[row[id_col]]
-            else:
-                group_id = get_or_create_group_id(nearby_index)
-            df.loc[i, 'group_id'] = group_id
-            group_dict[row[id_col]] = group_id
+    if display_id:
+    
+        # Assign a group_id to each row based on nearby points
+        for i, row in df.iterrows():
+            nearby_index_col = f'nearby_{display_id}'
+            if pd.notna(row[nearby_index_col]):
+                nearby_index = row[nearby_index_col]
+                if row[id_col] in group_dict:
+                    group_id = group_dict[row[id_col]]
+                else:
+                    group_id = get_or_create_group_id(nearby_index)
+                df.loc[i, 'group_id'] = group_id
+                group_dict[row[id_col]] = group_id
+    else:
+        # Assign a group_id to each row based on nearby points
+        for i, row in df.iterrows():
+            nearby_index_col = f'nearby_{id_col}'
+            if pd.notna(row[nearby_index_col]):
+                nearby_index = row[nearby_index_col]
+                if row[id_col] in group_dict:
+                    group_id = group_dict[row[id_col]]
+                else:
+                    group_id = get_or_create_group_id(nearby_index)
+                df.loc[i, 'group_id'] = group_id
+                group_dict[row[id_col]] = group_id
 
 
     # Add a 'group_sum' column to the DataFrame
@@ -326,18 +347,23 @@ def select_columns(df, uploaded_file):
                 "Longitude Column", df.columns, index=list(df.columns).index(lon_col)
             )
 
-        # Provide an option to select an ID column
+        # Provide an option to select 2 ID columns
         id_col_options = ["None"] + list(df.columns)
         with st.sidebar:
-            msg = "Select an ID Column. Associates each point with a unique identifier; if no `nearby_id` field is required, choose 'None'."
-            # Default to the first column in the DataFrame
+            msg = "Select a unique ID. Associates each point with a unique identifier; if no `nearby_id` field is required, choose 'None'."
             id_col = st.selectbox(msg, options=id_col_options, index=1)
+
+        
+        display_id_options = ["None"] + list(df.columns)
+        with st.sidebar:
+            msg = "Select an optional display ID. If selected, this value is used for the nearby_{id_col} field."
+            display_id = st.selectbox(msg, options=display_id_options, index=1)
 
         # Check if 'None' is selected and set id_col to None
         if id_col == "None":
             id_col = None
     else:  # use hardcoded sample data values
-        lat_col, lon_col, id_col = "LAT", "LONG", "INDEX"
+        lat_col, lon_col, id_col, display_id= "LAT", "LONG", "INDEX", "INDEX"
 
     # Provide an option to select a sum column
     sum_col = st.sidebar.selectbox(
@@ -345,11 +371,11 @@ def select_columns(df, uploaded_file):
         df.columns,
         # index=df.columns.get_loc("QUANTITY"),
     )
-    return lat_col, lon_col, id_col, sum_col
+    return lat_col, lon_col, id_col, sum_col, display_id
 
 
 def process_and_display(
-    df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file=None
+    df, lat_col, lon_col, id_col, display_id, distance_threshold_meters, uploaded_file=None
 ):
     """
     Process and display spatial proximity analysis results.
@@ -367,10 +393,10 @@ def process_and_display(
     """
     if lat_col and lon_col:
         processed_gdf = process_data(
-            df, lat_col, lon_col, distance_threshold_meters, id_col
+            df, lat_col, lon_col, distance_threshold_meters, id_col, display_id
         )
 
-        processed_gdf = identify_clusters(processed_gdf, id_col, sum_col)
+        processed_gdf = identify_clusters(processed_gdf, id_col, display_id, sum_col)
         display_gdf = processed_gdf.drop(columns=["geometry"])
 
         # Create and display the map
@@ -463,7 +489,7 @@ with st.sidebar:
     # Now convert the chosen distance threshold in feet to meters for processing
     distance_threshold_meters = feet_to_meters(distance_threshold_feet)
 
-    lat_col, lon_col, id_col, sum_col = select_columns(df, uploaded_file)
+    lat_col, lon_col, id_col, sum_col, display_id = select_columns(df, uploaded_file)
 
     "---"
     "### How it works"
@@ -492,5 +518,5 @@ with st.sidebar:
         "---"
 
 process_and_display(
-    df, lat_col, lon_col, id_col, distance_threshold_meters, uploaded_file
+    df, lat_col, lon_col, id_col, display_id, distance_threshold_meters, uploaded_file
 )
