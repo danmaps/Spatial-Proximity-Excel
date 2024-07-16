@@ -285,30 +285,21 @@ def identify_clusters(df, id_col, display_id, sum_col):
             current_group_id += 1
             return group_dict[idx]
 
-    # # drop duplicates based on id_col
-    # df = df.drop_duplicates(subset=[id_col])
+    # drop duplicates based on id_col
+    if id_col:
+        df = df.drop_duplicates(subset=[id_col])
 
     # Add a 'group_id' column to the DataFrame
     df = df.copy()
     df['group_id'] = np.nan
 
-    if display_id:
-    
+    if display_id or id_col:
+        # Use display_id if available, otherwise fall back to id_col
+        col_to_use = display_id if display_id else id_col
+
         # Assign a group_id to each row based on nearby points
         for i, row in df.iterrows():
-            nearby_index_col = f'nearby_{display_id}'
-            if pd.notna(row[nearby_index_col]):
-                nearby_index = row[nearby_index_col]
-                if row[id_col] in group_dict:
-                    group_id = group_dict[row[id_col]]
-                else:
-                    group_id = get_or_create_group_id(nearby_index)
-                df.loc[i, 'group_id'] = group_id
-                group_dict[row[id_col]] = group_id
-    else:
-        # Assign a group_id to each row based on nearby points
-        for i, row in df.iterrows():
-            nearby_index_col = f'nearby_{id_col}'
+            nearby_index_col = f'nearby_{col_to_use}'
             if pd.notna(row[nearby_index_col]):
                 nearby_index = row[nearby_index_col]
                 if row[id_col] in group_dict:
@@ -318,6 +309,9 @@ def identify_clusters(df, id_col, display_id, sum_col):
                 df.loc[i, 'group_id'] = group_id
                 group_dict[row[id_col]] = group_id
 
+    else:
+        # drop group_id column and return the DataFrame
+        return df.drop(columns=['group_id'])
 
     # Add a 'group_sum' column to the DataFrame
     df['group_sum'] = np.nan # this is renamed at the end to "group_{sum_col}"
@@ -332,46 +326,66 @@ def identify_clusters(df, id_col, display_id, sum_col):
 
 
 
+def check_and_set_none(cols):
+    """
+    Check if 'None' is selected and set the value to None, instead of a string containing 'None'.
+
+    Args:
+        cols (dict): Dictionary mapping column names to their selected values.
+
+    Returns:
+        dict: Updated dictionary with 'None' values set to None.
+    """
+    return {key: None if value == "None" else value for key, value in cols.items()}
+
+
 def select_columns(df, uploaded_file):
+    """
+    Selects the columns from a DataFrame based on the uploaded file.
+
+    Args:
+        df (pandas.DataFrame): The DataFrame containing the data.
+        uploaded_file (bool): A flag indicating if a file was uploaded.
+
+    Returns:
+        Tuple[str, str, Optional[str], str, Optional[str]]: A tuple containing the selected latitude column,
+        longitude column, unique ID column, sum column, and optional display ID column.
+    """
+
     lat_col, lon_col = find_lat_lon_columns(df)
-    if uploaded_file:  # skip if using sample data
-        if not lat_col or not lon_col:
-            st.warning("Spatial columns not detected. Select them below.", icon="⚠️")
-            lat_col = st.selectbox("Latitude Column", df.columns)
-            lon_col = st.selectbox("Longitude Column", df.columns)
-        else:
-            lat_col = st.selectbox(
-                "Latitude Column", df.columns, index=list(df.columns).index(lat_col)
-            )
-            lon_col = st.selectbox(
-                "Longitude Column", df.columns, index=list(df.columns).index(lon_col)
-            )
+    if not lat_col or not lon_col:
+        st.warning("Spatial columns not detected. Select them below.", icon="⚠️")
+        lat_col = st.selectbox("Latitude Column", df.columns)
+        lon_col = st.selectbox("Longitude Column", df.columns)
+    else:
+        lat_col = st.selectbox(
+            "Latitude Column", df.columns, index=list(df.columns).index(lat_col)
+        )
+        lon_col = st.selectbox(
+            "Longitude Column", df.columns, index=list(df.columns).index(lon_col)
+        )
 
-        # Provide an option to select 2 ID columns
-        id_col_options = ["None"] + list(df.columns)
-        with st.sidebar:
-            msg = "Select a unique ID. Associates each point with a unique identifier; if no `nearby_id` field is required, choose 'None'."
-            id_col = st.selectbox(msg, options=id_col_options, index=1)
-
-        
-        display_id_options = ["None"] + list(df.columns)
-        with st.sidebar:
-            msg = "Select an optional display ID. If selected, this value is used for the nearby_{id_col} field."
-            display_id = st.selectbox(msg, options=display_id_options, index=1)
-
-        # Check if 'None' is selected and set id_col to None
-        if id_col == "None":
-            id_col = None
-    else:  # use hardcoded sample data values
-        lat_col, lon_col, id_col, display_id= "LAT", "LONG", "INDEX", "INDEX"
-
+    # Provide an option to select ID columns
+    id_col_options = ["None"] + list(df.columns)
+    with st.sidebar:
+        id_col = st.selectbox("Select a unique ID", options=id_col_options, index=0)
+    
+    display_id_options = ["None"] + list(df.columns)
+    with st.sidebar:
+        display_id = st.selectbox("Select an optional display ID", options=display_id_options, index=0)
+    
     # Provide an option to select a sum column
-    sum_col = st.sidebar.selectbox(
-        "Select a Sum Column",
-        df.columns,
-        # index=df.columns.get_loc("QUANTITY"),
-    )
-    return lat_col, lon_col, id_col, sum_col, display_id
+    sum_col = st.sidebar.selectbox("Select a Sum Column", df.columns)
+
+    # Check if 'None' is selected and set the value to None, instead of a string containing 'None'
+    cols = {"lat_col": lat_col, "lon_col": lon_col, "id_col": id_col, "sum_col": sum_col, "display_id": display_id}
+    cols = check_and_set_none(cols)
+    
+    # Default values for sample data
+    if not uploaded_file:
+        lat_col, lon_col, id_col, sum_col, display_id = "LAT", "LONG", "INDEX", "QUANTITY", "INDEX"
+
+    return cols.values()
 
 
 def process_and_display(
@@ -395,7 +409,7 @@ def process_and_display(
         processed_gdf = process_data(
             df, lat_col, lon_col, distance_threshold_meters, id_col, display_id
         )
-
+        
         processed_gdf = identify_clusters(processed_gdf, id_col, display_id, sum_col)
         display_gdf = processed_gdf.drop(columns=["geometry"])
 
@@ -405,20 +419,18 @@ def process_and_display(
                 processed_gdf, distance_threshold_meters, lat_col, lon_col
             )
         )
+
+        # Rename group_sum column to f"group_{sum_col}"
+        display_gdf = display_gdf.rename(columns={"group_sum": f"group_{sum_col}"})
+        
         if id_col:
-            st.caption(
-                f"""
-                        Hover/click on points to view {id_col}\n
-                        Points nearby (within {distance_threshold_feet}ft) others are red.
-                       """
-            )
+            st.caption(f"Hover/click on points to view {id_col}")
+        st.caption(f"Points nearby (within {distance_threshold_feet}ft) others are red.")
+
         # Convert to Excel and offer download
         df_xlsx = convert_df_to_excel(display_gdf)
 
-        if uploaded_file:
-            short_file_name = os.path.splitext(uploaded_file.name)[0]
-        else:
-            short_file_name = "sample_data"
+        short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
 
         file_name = (
             f"{short_file_name}_{int(distance_threshold_meters * 3.28084)}ft.xlsx"
@@ -433,22 +445,16 @@ def process_and_display(
 
         hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
         if hide_null_distance:
-            # Filter out rows where 'distance_feet' is null
             display_gdf = display_gdf.dropna(subset=["distance_feet"])
         filtered_df = processed_gdf.dropna(subset=["distance_feet"])
 
         # Rename group_sum column to f"group_{sum_col}"
-        display_gdf = display_gdf.rename(columns={"group_sum": f"group_{sum_col}"})
         filtered_df = filtered_df.rename(columns={"group_sum": f"group_{sum_col}"})
-        
-        # Display the processed DataFrame
-        st.write("Processed Data:", display_gdf)
-        if id_col:
-            count = filtered_df[id_col].nunique()
-            st.info(
-                f"{count}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another."
-            )
 
+
+        # Display the processed DataFrame
+        st.info(f"{len(filtered_df)}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another.")
+        display_gdf
 
         
 
