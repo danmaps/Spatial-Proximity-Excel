@@ -327,66 +327,56 @@ def identify_clusters(df, id_col, display_id, sum_col):
 
 
 def check_and_set_none(cols):
-    """
-    Check if 'None' is selected and set the value to None, instead of a string containing 'None'.
-
-    Args:
-        cols (dict): Dictionary mapping column names to their selected values.
-
-    Returns:
-        dict: Updated dictionary with 'None' values set to None.
-    """
     return {key: None if value == "None" else value for key, value in cols.items()}
 
+def select_columns_ui(df, col_name, default_value):
+    if default_value and default_value in df.columns:
+        default_index = list(df.columns).index(default_value)
+    else:
+        default_index = 0
+    return st.selectbox(col_name, df.columns, index=default_index)
+
+def select_sidebar_columns(df, msg, options, default_value):
+    if default_value and default_value in options:
+        default_index = options.index(default_value)
+    else:
+        default_index = 0
+    with st.sidebar:
+        return st.selectbox(msg, options=options, index=default_index)
+
+def handle_column_selection(df, lat_default, lon_default, id_default, sum_default, display_id_default):
+    lat_col = select_columns_ui(df, "Latitude Column", lat_default)
+    lon_col = select_columns_ui(df, "Longitude Column", lon_default)
+    
+    id_col_options = ["None"] + list(df.columns)
+    display_id_options = ["None"] + list(df.columns)
+
+    id_col = select_sidebar_columns(df, "Select a unique ID", id_col_options, id_default)
+    display_id = select_sidebar_columns(df, "Select an optional display ID", display_id_options, display_id_default)
+    sum_col = st.sidebar.selectbox("Select a Sum Column", df.columns, index=df.columns.get_loc(sum_default) if sum_default in df.columns else 0)
+
+    cols = {
+        "lat_col": lat_col,
+        "lon_col": lon_col,
+        "id_col": id_col,
+        "sum_col": sum_col,
+        "display_id": display_id
+    }
+
+    return check_and_set_none(cols)
 
 def select_columns(df, uploaded_file):
-    """
-    Selects the columns from a DataFrame based on the uploaded file.
-
-    Args:
-        df (pandas.DataFrame): The DataFrame containing the data.
-        uploaded_file (bool): A flag indicating if a file was uploaded.
-
-    Returns:
-        Tuple[str, str, Optional[str], str, Optional[str]]: A tuple containing the selected latitude column,
-        longitude column, unique ID column, sum column, and optional display ID column.
-    """
-
-    lat_col, lon_col = find_lat_lon_columns(df)
-    if not lat_col or not lon_col:
-        st.warning("Spatial columns not detected. Select them below.", icon="⚠️")
-        lat_col = st.selectbox("Latitude Column", df.columns)
-        lon_col = st.selectbox("Longitude Column", df.columns)
+    if uploaded_file:
+        lat_col_default, lon_col_default = find_lat_lon_columns(df)
     else:
-        lat_col = st.selectbox(
-            "Latitude Column", df.columns, index=list(df.columns).index(lat_col)
-        )
-        lon_col = st.selectbox(
-            "Longitude Column", df.columns, index=list(df.columns).index(lon_col)
-        )
+        lat_col_default, lon_col_default = "LAT", "LONG"
 
-    # Provide an option to select ID columns
-    id_col_options = ["None"] + list(df.columns)
-    with st.sidebar:
-        id_col = st.selectbox("Select a unique ID", options=id_col_options, index=0)
-    
-    display_id_options = ["None"] + list(df.columns)
-    with st.sidebar:
-        display_id = st.selectbox("Select an optional display ID", options=display_id_options, index=0)
-    
-    # Provide an option to select a sum column
-    sum_col = st.sidebar.selectbox("Select a Sum Column", df.columns)
+    id_col_default = "INDEX"
+    sum_col_default = "QUANTITY"
+    display_id_default = "INDEX"
 
-    # Check if 'None' is selected and set the value to None, instead of a string containing 'None'
-    cols = {"lat_col": lat_col, "lon_col": lon_col, "id_col": id_col, "sum_col": sum_col, "display_id": display_id}
-    cols = check_and_set_none(cols)
-    
-    # Default values for sample data
-    if not uploaded_file:
-        lat_col, lon_col, id_col, sum_col, display_id = "LAT", "LONG", "INDEX", "QUANTITY", "INDEX"
-
+    cols = handle_column_selection(df, lat_col_default, lon_col_default, id_col_default, sum_col_default, display_id_default)
     return cols.values()
-
 
 def process_and_display(
     df, lat_col, lon_col, id_col, display_id, distance_threshold_meters, uploaded_file=None
