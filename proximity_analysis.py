@@ -278,6 +278,9 @@ def identify_clusters(df, id_col, sum_col):
             current_group_id += 1
             return group_dict[idx]
 
+    # drop duplicates based on id_col
+    df = df.drop_duplicates(subset=[id_col])
+
     # Add a 'group_id' column to the DataFrame
     df = df.copy()
     df['group_id'] = np.nan
@@ -294,8 +297,6 @@ def identify_clusters(df, id_col, sum_col):
             df.loc[i, 'group_id'] = group_id
             group_dict[row[id_col]] = group_id
 
-    # drop duplicates based on id_col
-    df = df.drop_duplicates(subset=[id_col])
 
     # Add a 'group_sum' column to the DataFrame
     df['group_sum'] = np.nan # this is renamed at the end to "group_{sum_col}"
