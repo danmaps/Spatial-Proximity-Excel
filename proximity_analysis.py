@@ -7,7 +7,7 @@ from folium import plugins
 from streamlit_folium import folium_static
 import os
 import numpy as np
-from shapely.geometry import Point
+
 
 st.set_page_config(
     page_title="Spatial Proximity Excel Enrichment",
@@ -113,11 +113,17 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     bounds = get_bounds(gdf)
 
     # Start with a base map (zoom start will be adjusted with fit_bounds)
-    m = folium.Map(tiles="cartodb-dark-matter")
+    m = folium.Map(tiles="cartodb-dark-matter", width='100%', height='100%')
 
     # Exclude columns with non-serializable data types
     non_serializable_cols = gdf.select_dtypes(include=['datetime64[ns]', 'timedelta64[ns]', 'period[Q]']).columns
     gdf = gdf.drop(columns=non_serializable_cols)
+
+    # Convert specific columns to strings to avoid commas in large numbers
+    if 'EQUIP_NUM' in gdf.columns:
+        gdf['EQUIP_NUM'] = gdf['EQUIP_NUM'].astype(str)
+    if 'nearby_EQUIP_NUM' in gdf.columns:
+        gdf['nearby_EQUIP_NUM'] = gdf['nearby_EQUIP_NUM'].astype(str)
     
     # Create a GeoJson layer
     geojson_layer = folium.GeoJson(
@@ -472,7 +478,7 @@ def process_and_display(
         folium_static(
             create_folium_map(
                 processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
-            )
+            ),width=1000,height=500
         )
 
         # Rename group_sum column to f"group_{sum_col}"
@@ -514,6 +520,14 @@ def process_and_display(
         st.info(
             f"{len(filtered_df)}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another."
         )
+        
+        # Convert specific columns to strings to avoid commas in large numbers
+        if 'EQUIP_NUM' in display_gdf.columns:
+            display_gdf['EQUIP_NUM'] = display_gdf['EQUIP_NUM'].astype(str)
+        if 'nearby_EQUIP_NUM' in display_gdf.columns:
+            display_gdf['nearby_EQUIP_NUM'] = display_gdf['nearby_EQUIP_NUM'].astype(str)
+        if 'EQUI1_NUM' in display_gdf.columns:
+            display_gdf['EQUI1_NUM'] = display_gdf['EQUI1_NUM'].astype(str)
         display_gdf
 
 
