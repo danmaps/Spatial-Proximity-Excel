@@ -160,16 +160,18 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     for _, row in gdf.iterrows():
         color = "red" if pd.notnull(row["distance_feet"]) else "white"
         # st.write(row)
-        tooltip_text = (
-            f"<b>group_id</b> {int(row["group_id"])}<br><b>Total {sum_col}</b> {row[f"group_sum"]}" if id_col and pd.notnull(row["group_id"]) else "Not in group"
-        )
+        if "group_id" in gdf.columns:
+            tooltip_text = (
+                f"<b>group_id</b> {int(row["group_id"])}<br><b>Total {sum_col}</b> {row[f"group_sum"]}" if id_col and pd.notnull(row["group_id"]) else "Not in group"
+            )
 
-        # find id_col value of all the points with matching group_id and add them to the tooltip
-        if id_col and pd.notnull(row["group_id"]):
-            nearby_points = str(gdf[gdf["group_id"] == row["group_id"]][id_col].tolist())[1:-1].replace("'", "")
-            # st.write(nearby_points)
-            tooltip_text += f"<br><b>nearby {id_col}s</b> " + nearby_points
-
+            # find id_col value of all the points with matching group_id and add them to the tooltip
+            if id_col and pd.notnull(row["group_id"]):
+                nearby_points = str(gdf[gdf["group_id"] == row["group_id"]][id_col].tolist())[1:-1].replace("'", "")
+                # st.write(nearby_points)
+                tooltip_text += f"<br><b>nearby {id_col}s</b> " + nearby_points
+        else:
+            tooltip_text = ""
         # Add buffers to the map
         folium.Circle(
             location=[row[lat_col], row[lon_col]],
@@ -180,6 +182,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
             tooltip=tooltip_text,
             popup=folium.Popup(tooltip_text, parse_html=False),
         ).add_to(m)
+        
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
