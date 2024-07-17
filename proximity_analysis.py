@@ -162,7 +162,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         # st.write(row)
         if "group_id" in gdf.columns:
             tooltip_text = (
-                f"<b>group_id</b> {int(row["group_id"])}<br><b>Total {sum_col}</b> {row[f"group_sum"]}" if id_col and pd.notnull(row["group_id"]) else "Not in group"
+                f"<b>group_id</b> {int(row["group_id"])}<br><b>Total {sum_col}</b> {row["group_sum"]}" if id_col and pd.notnull(row["group_id"]) else "Not in group"
             )
 
             # find id_col value of all the points with matching group_id and add them to the tooltip
