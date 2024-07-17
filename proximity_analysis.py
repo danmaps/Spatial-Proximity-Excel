@@ -70,35 +70,13 @@ def find_lat_lon_columns(df):
     return lat_col, lon_col
 
 
-# Helper function to convert DataFrame to Excel in memory
+# convert DataFrame to Excel in memory
 def convert_df_to_excel(_df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
         _df.to_excel(writer, index=False, sheet_name="Sheet1")
     processed_data = output.getvalue()
     return processed_data
-
-
-# Convert feet to meters
-def feet_to_meters(feet):
-    return feet * 0.3048
-
-
-def generate_buffers(gdf, distance):
-    # Generate a buffer polygon around each point with the specified distance
-    gdf["buffer"] = gdf.geometry.buffer(distance)
-    return gdf
-
-
-def get_bounds(gdf_with_buffers):
-    # If your data is in a projected CRS, convert it to WGS 84 (latitude and longitude)
-    if gdf_with_buffers.crs != "epsg:4326":
-        gdf_with_buffers = gdf_with_buffers.to_crs("epsg:4326")
-    bounds = gdf_with_buffers.total_bounds
-
-    # Correct the order of the bounds for Folium:
-    # [[southwest_lat, southwest_lon], [northeast_lat, northeast_lon]]
-    return [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
 
 
 def get_bounds(gdf):
@@ -156,7 +134,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
             )
         ).add_to(m)
 
-    else:
+    else: # if no display_id, skip trying to add it to the popup and tooltip
         geojson_layer = folium.GeoJson(
             gdf,
             style_function=lambda x: {
@@ -593,11 +571,10 @@ with st.sidebar:
     )
 
     # Choose which value to use based on whether the custom value differs from the slider
-    if custom_distance_threshold_feet != distance_threshold_feet:
-        distance_threshold_feet = custom_distance_threshold_feet
+    distance_threshold_feet = custom_distance_threshold_feet if custom_distance_threshold_feet != distance_threshold_feet else distance_threshold_feet
 
     # Now convert the chosen distance threshold in feet to meters for processing
-    distance_threshold_meters = feet_to_meters(distance_threshold_feet)
+    distance_threshold_meters = distance_threshold_feet* 0.3048
 
     lat_col, lon_col, id_col, sum_col, display_id = select_columns(df, uploaded_file)
 
