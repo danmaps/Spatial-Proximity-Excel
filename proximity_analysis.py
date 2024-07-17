@@ -124,19 +124,50 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         gdf['EQUIP_NUM'] = gdf['EQUIP_NUM'].astype(str)
     if 'nearby_EQUIP_NUM' in gdf.columns:
         gdf['nearby_EQUIP_NUM'] = gdf['nearby_EQUIP_NUM'].astype(str)
+
     
+    # take advantage of the GeoDataFrame structure to set the style of the data
+    # create a column style containing each feature’s style in a dictionary
+    def style_function(row):
+        if pd.isna(row['group_id']): 
+            return "gray"
+        else:
+            # st.write(f"found a match at {row[id_col]}")
+            return "red"
+
+
+    # Add a style column to the gdf
+    if "group_id" in gdf.columns: 
+        gdf['style'] = gdf.apply(style_function, axis=1)
+    else:
+        gdf['style'] = "gray"
+
     # Create a GeoJson layer
-    geojson_layer = folium.GeoJson(
-        gdf,
-        popup=folium.GeoJsonPopup(fields=[display_id, id_col, sum_col], localize=True),
-        tooltip=folium.GeoJsonTooltip(
-            fields=[display_id, id_col, sum_col], localize=True
-        ),
-        marker=folium.Marker(
-            icon=folium.Icon(
-                icon="database", prefix='fa', color="red"),
-            ),
-    ).add_to(m)
+
+    if display_id:
+        geojson_layer = folium.GeoJson(
+            gdf,
+            style_function=lambda x: {
+                'markerColor': x['properties']['style'],},
+            marker=folium.Marker(icon=folium.Icon(icon='circle', prefix='fa',)),
+            popup=folium.GeoJsonPopup(fields=[display_id, id_col, sum_col, "group_id"], localize=True),
+            tooltip=folium.GeoJsonTooltip(
+                fields=[display_id, id_col, sum_col, "group_id"], localize=True
+            )
+        ).add_to(m)
+
+    else:
+        geojson_layer = folium.GeoJson(
+            gdf,
+            style_function=lambda x: {
+                'markerColor': x['properties']['style'],},
+            marker=folium.Marker(icon=folium.Icon(icon='circle', prefix='fa',)),
+            popup=folium.GeoJsonPopup(fields=[id_col, sum_col, "group_id"], localize=True),
+            tooltip=folium.GeoJsonTooltip(
+                fields=[id_col, sum_col, "group_id"], localize=True
+            )
+        ).add_to(m)
+
 
     # Add search functionality
     search = folium.plugins.Search(
@@ -147,31 +178,22 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         search_label=id_col,
     ).add_to(m)
 
-    # Add points and buffers to the map
+    # Add buffers to the map
     for _, row in gdf.iterrows():
-        point_color = "red" if pd.notnull(row["distance_feet"]) else "white"
+        color = "red" if pd.notnull(row["distance_feet"]) else "white"
         tooltip_text = (
-            str(row[id_col]) if id_col and pd.notnull(row[id_col]) else "No ID"
+            f"<b>group_id</b> {int(row["group_id"])}" if id_col and pd.notnull(row["group_id"]) else "Not in group"
         )
-
-        # folium.CircleMarker(
-        #     location=[row[lat_col], row[lon_col]],
-        #     radius=2,
-        #     color=point_color,
-        #     fill=True,
-        #     fill_color=point_color,
-        #     fill_opacity=1,
-        #     weight=2,
-        #     tooltip=tooltip_text,
-        #     popup=folium.Popup(tooltip_text, parse_html=True),
-        # ).add_to(m)
 
         # Add buffers to the map
         folium.Circle(
             location=[row[lat_col], row[lon_col]],
             radius=distance_threshold_meters,
-            color="grey",
+            color=color,
             weight=2,
+            fill=True,
+            tooltip=tooltip_text,
+            popup=folium.Popup(tooltip_text, parse_html=True),
         ).add_to(m)
 
     # Fit the map to the bounds
@@ -292,7 +314,7 @@ def process_data(
     return merged_gdf
 
 
-def identify_clusters(df, id_col, display_id, sum_col):
+def identify_clusters(df, id_col, display_id=None, sum_col=None):
     """
     Assigns a group_id to each row based on nearby points.
 
@@ -475,11 +497,14 @@ def process_and_display(
         display_gdf = processed_gdf.drop(columns=["geometry"])
 
         # Create and display the map
-        folium_static(
-            create_folium_map(
-                processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
-            ),width=1000,height=500
-        )
+        if id_col:
+            folium_static(
+                create_folium_map(
+                    processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
+                ),width=1000,height=500
+            )
+        else:
+            st.warning("choose a unique ID column")
 
         # Rename group_sum column to f"group_{sum_col}"
         display_gdf = display_gdf.rename(columns={"group_sum": f"group_{sum_col}"})
