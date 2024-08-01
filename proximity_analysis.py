@@ -302,81 +302,67 @@ def process_data(
     return merged_gdf
 
 
+class UnionFind:
+    def __init__(self):
+        self.parent = {}
+
+    def find(self, u):
+        if self.parent[u] != u:
+            self.parent[u] = self.find(self.parent[u])
+        return self.parent[u]
+
+    def union(self, u, v):
+        root_u = self.find(u)
+        root_v = self.find(v)
+        if root_u != root_v:
+            self.parent[root_v] = root_u
+
+    def add(self, u):
+        if u not in self.parent:
+            self.parent[u] = u
+
 def identify_clusters(df, id_col, display_id=None, sum_col=None):
-    """
-    Assigns a group_id to each row based on nearby points.
+    uf = UnionFind()
 
-    Args:
-        df (pd.DataFrame): The input DataFrame.
-        id_column (str): The name of the column containing the unique identifier for each point.
-        sum_col (str): The name of the column containing the values to be summed for each group.
-
-    Returns:
-        pd.DataFrame: The input DataFrame with an additional 'group_id' column.
-    """
-
-    group_dict = {}
-    current_group_id = 0
-
-    def get_or_create_group_id(idx):
-        """
-        Returns the group_id for the given index.
-
-        If the index is not in the group_dict, creates a new group_id and adds it to the group_dict.
-
-        Args:
-            idx (int): The index to get or create the group_id for.
-
-        Returns:
-            int: The group_id for the given index.
-        """
-        nonlocal current_group_id
-        if idx in group_dict:
-            return group_dict[idx]
-        else:
-            group_dict[idx] = current_group_id
-            current_group_id += 1
-            return group_dict[idx]
-
-    # drop duplicates based on id_col
+    # Drop duplicates based on id_col
     if id_col:
         df = df.drop_duplicates(subset=[id_col])
 
-    # Add a 'group_id' column to the DataFrame
     df = df.copy()
     df["group_id"] = np.nan
 
     if display_id or id_col:
-        # Use display_id if available, otherwise fall back to id_col
         col_to_use = display_id if display_id else id_col
-        
-        # Assign a group_id to each row based on nearby points
+
         for i, row in df.iterrows():
             nearby_index_col = f"nearby_{col_to_use}"
-            if nearby_index_col in df.columns:
-                if pd.notna(row[nearby_index_col]):
-                    nearby_index = row[nearby_index_col]
-                    if row[col_to_use] in group_dict:
-                        group_id = group_dict[row[col_to_use]]
-                    else:
-                        group_id = get_or_create_group_id(nearby_index)
-                    df.loc[i, "group_id"] = group_id
-                    group_dict[row[col_to_use]] = group_id
+            if nearby_index_col in df.columns and pd.notna(row[nearby_index_col]):
+                nearby_index = df[df[col_to_use] == row[nearby_index_col]].index[0]
+                uf.add(i)
+                uf.add(nearby_index)
+                uf.union(i, nearby_index)
+
+        # Assign group IDs based on the union-find structure
+        for i in df.index:
+            if i in uf.parent:
+                df.loc[i, "group_id"] = uf.find(i)
+                
+        # Normalize group IDs to start from 0
+        group_id_map = {old_id: new_id for new_id, old_id in enumerate(sorted(df["group_id"].dropna().unique()))}
+        df["group_id"] = df["group_id"].map(group_id_map)
 
     else:
-        # drop group_id column and return the DataFrame
         return df.drop(columns=["group_id"])
 
-    # Add a 'group_sum' column to the DataFrame
-    df["group_sum"] = np.nan  # this is renamed at the end to "group_{sum_col}"
-
-    # Assign a group_sum to each group
+    # Sum column logic remains unchanged
+    df["group_sum"] = np.nan
     unique_group_ids = df["group_id"].dropna().unique()
     for group_id in unique_group_ids:
         group_sum = df.loc[df["group_id"] == group_id, sum_col].sum()
         df.loc[df["group_id"] == group_id, "group_sum"] = group_sum
 
     return df
+
 
 
 def check_and_set_none(cols):
