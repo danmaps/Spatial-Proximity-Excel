@@ -211,8 +211,9 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
             # Convert the centroid back to WGS84 (lat/lon)
             centroid_wgs84 = gpd.GeoSeries([centroid], crs=gdf.crs).to_crs(epsg=4326).iloc[0]
             
-            # tooltip_text = create_tooltip(row, gdf, id_col, sum_col)
-            tooltip_text = f"group_id {group_id}, Total: {group_points['group_sum'].sum()}"
+            tooltip_text = f"<b>group_id:</b> {int(group_id)}<br><b>{sum_col}:</b> {int(group_points['group_sum'].values[0])}"
+            tooltip_text += f"<br><b>nearby {id_col}s:</b> " + str(group_points[id_col].tolist()).replace("'", "").replace("[", "").replace("]", "")
+            tooltip_text += f"<br><b>nearby {display_id}s:</b> " + str(group_points[display_id].tolist()).replace("'", "").replace("[", "").replace("]", "")
 
             # Ensure the centroid is valid before proceeding
             if not centroid_wgs84.is_empty:
@@ -597,14 +598,18 @@ def process_and_display(
                 unique_groups = len(groups_over_threshold["group_id"].unique())
                 groups_msg += f" {unique_groups} of them are over {sum_threshold} {sum_col}."
         
+            groups_over_threshold
+
+        else:
+            groups_df
+
         st.info(groups_msg)
 
-        groups_over_threshold
 
-        offer_download(groups_df,uploaded_file,distance_threshold_feet)
+        offer_download(groups_df,uploaded_file,distance_threshold_feet,"_groups")
         
 
-def offer_download(df,uploaded_file,distance_threshold_feet):
+def offer_download(df,uploaded_file,distance_threshold_feet,groups=""):
     '''
     Convert the DataFrame to an Excel file and offer download
     '''
@@ -615,17 +620,17 @@ def offer_download(df,uploaded_file,distance_threshold_feet):
     )
 
     file_name = (
-        f"{short_file_name}_{int(distance_threshold_feet)}ft_groups.xlsx"
+        f"{short_file_name}_{int(distance_threshold_feet)}ft{groups}.xlsx"
     )
 
     st.download_button(
-        label=f"📥 Download {file_name}",
+        label=f"📥 {file_name}",
         data=df_xlsx,
         file_name=file_name,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         key=df.shape,
+        help=f"Click to download {file_name}",
     )
-    # st.write(df.shape, "rows downloaded.")
 
 # Streamlit UI
 
