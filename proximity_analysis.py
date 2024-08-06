@@ -83,6 +83,20 @@ def get_bounds(gdf):
     bounds = gdf.total_bounds
     return [[bounds[1], bounds[0]], [bounds[3], bounds[2]]]
 
+
+# Function to create tooltips based on the row and group information
+def create_tooltip(row, gdf, id_col, sum_col):
+    if "group_id" in gdf.columns and pd.notnull(row["group_id"]):
+        tooltip_text = f"<b>group_id</b> {int(row['group_id'])}<br><b>Total {sum_col}</b> {row['group_sum']}"
+        # Add nearby points to the tooltip
+        nearby_points = str(gdf[gdf["group_id"] == row["group_id"]][id_col].tolist())[1:-1].replace("'", "")
+        tooltip_text += f"<br><b>nearby {id_col}s</b> " + nearby_points
+    else:
+        tooltip_text = "Not in group"
+    
+    return tooltip_text
+
+
 def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     # Remove rows where lat or lon is NaN
     gdf = gdf.dropna(subset=[lat_col, lon_col])
@@ -155,32 +169,62 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         search_label=id_col,
     ).add_to(m)
 
-    # Add buffers to the map
-    for _, row in gdf.iterrows():
-        color = "red" if pd.notnull(row["distance_feet"]) else "white"
-        # st.write(row)
-        if "group_id" in gdf.columns:
-            tooltip_text = (
-                f"<b>group_id</b> {int(row['group_id'])}<br><b>Total {sum_col}</b> {row['group_sum']}" if id_col and pd.notnull(row["group_id"]) else "Not in group"
-            )
+    # # Add buffers to the map
+    # for _, row in gdf.iterrows():
+    #     color = "red" if pd.notnull(row["distance_feet"]) else "white"
+    #     tooltip_text = create_tooltip(row, gdf, id_col, sum_col)
+        
+    #     folium.Circle(
+    #         location=[row[lat_col], row[lon_col]],
+    #         radius=distance_threshold_meters,
+    #         color=color,
+    #         weight=2,
+    #         fill=True,
+    #         # tooltip=tooltip_text,
+    #         popup=folium.Popup(tooltip_text, parse_html=False),
+    #     ).add_to(m)
 
-            # find id_col value of all the points with matching group_id and add them to the tooltip
-            if id_col and pd.notnull(row["group_id"]):
-                nearby_points = str(gdf[gdf["group_id"] == row["group_id"]][id_col].tolist())[1:-1].replace("'", "")
-                # st.write(nearby_points)
-                tooltip_text += f"<br><b>nearby {id_col}s</b> " + nearby_points
-        else:
-            tooltip_text = ""
-        # Add buffers to the map
-        folium.Circle(
-            location=[row[lat_col], row[lon_col]],
-            radius=distance_threshold_meters,
-            color=color,
-            weight=2,
-            fill=True,
-            tooltip=tooltip_text,
-            popup=folium.Popup(tooltip_text, parse_html=False),
-        ).add_to(m)
+    # Reproject the GeoDataFrame to a suitable projected CRS (e.g., UTM)
+    gdf = gdf.to_crs(epsg=32611)  # Example EPSG code for UTM zone 11N
+
+    # Add a minimum bounding circle to the points by group_id
+    if "group_id" in gdf.columns:
+        for group_id in gdf["group_id"].unique():
+            if use_sum_threshold:
+                # Filter groups with sum above threshold
+                group_points = gdf[(gdf["group_id"] == group_id) & (gdf["group_sum"] >= sum_threshold)]
+            else:
+                group_points = gdf[gdf["group_id"] == group_id]
+            
+            if group_points.empty:
+                continue  # Skip empty groups
+
+            # Calculate the centroid of the group
+            centroid = group_points.geometry.unary_union.centroid
+            
+            if centroid.is_empty:
+                continue  # Skip if the centroid is empty
+            
+            # Calculate the maximum distance from the centroid to any point in the group
+            max_distance = group_points.geometry.distance(centroid).max()
+            
+            # Convert the centroid back to WGS84 (lat/lon)
+            centroid_wgs84 = gpd.GeoSeries([centroid], crs=gdf.crs).to_crs(epsg=4326).iloc[0]
+            
+            # tooltip_text = create_tooltip(row, gdf, id_col, sum_col)
+            tooltip_text = f"group_id {group_id}, Total: {group_points['group_sum'].sum()}"
+
+            # Ensure the centroid is valid before proceeding
+            if not centroid_wgs84.is_empty:
+                folium.Circle(
+                    location=[centroid_wgs84.y, centroid_wgs84.x],
+                    radius=max_distance,
+                    color="white",
+                    weight=2,
+                    fill=True,
+                    tooltip=tooltip_text,
+                    popup=folium.Popup(tooltip_text, parse_html=False),
+                ).add_to(m)
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
@@ -542,20 +586,20 @@ def process_and_display(
 
         groups_df = create_groups_df(filtered_df, id_col, display_id, sum_col)
 
-        st.info(f"There are {len(groups_df)} groups.")
+        groups_msg = f"There are {len(groups_df)} groups."
 
         if use_sum_threshold:
             if sum_threshold:
-                filtered_df = filtered_df[filtered_df[f"group_{sum_col}"] >= sum_threshold]
+                groups_over_threshold = groups_df[groups_df[f"{sum_col}"] >= sum_threshold]
 
             # Show info about how many groups are above the sum threshold
             if sum_threshold:
-                unique_groups = len(filtered_df["group_id"].unique())
-                st.info(
-                    f"{unique_groups} groups are above the sum threshold."
-                )
+                unique_groups = len(groups_over_threshold["group_id"].unique())
+                groups_msg += f" {unique_groups} of them are over {sum_threshold} {sum_col}."
         
-        groups_df
+        st.info(groups_msg)
+
+        groups_over_threshold
 
         offer_download(groups_df,uploaded_file,distance_threshold_feet)
         
