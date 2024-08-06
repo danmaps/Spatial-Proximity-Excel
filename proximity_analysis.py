@@ -31,7 +31,7 @@ sample_data = {
     "INDEX": [i for i in range(1, num_points + 1)],
     "LAT": np.random.uniform(lat_min, lat_max, num_points),
     "LONG": np.random.uniform(long_min, long_max, num_points),
-    "QUANTITY": np.random.randint(100, 1000, num_points),
+    "QUANTITY": np.random.randint(250, 1500, num_points),
 }
 
 
@@ -113,7 +113,6 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
             # st.write(f"found a match at {row[id_col]}")
             return "red"
 
-
     # Add a style column to the gdf
     if "group_id" in gdf.columns: 
         gdf['style'] = gdf.apply(style_function, axis=1)
@@ -182,7 +181,6 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
             tooltip=tooltip_text,
             popup=folium.Popup(tooltip_text, parse_html=False),
         ).add_to(m)
-        
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
@@ -439,6 +437,34 @@ def select_columns(df, uploaded_file):
     return cols.values()
 
 
+def create_groups_df(gdf,id_col,display_id,sum_col):
+    
+    # Group by 'group_id' and aggregate
+    grouped_df = gdf.groupby('group_id').agg(
+        id_combined=(id_col, lambda x: ','.join(map(str, x))),
+        display_combined=(display_id, lambda x: ','.join(map(str, x))),
+        group_QUANTITY=(f'group_{sum_col}', 'first')
+    ).reset_index()
+
+    # Rename columns
+    if not uploaded_file:
+        grouped_df = grouped_df.rename(columns={
+            'id_combined': id_col+"_id", # no duplicates allowed
+            'display_combined': display_id+"_display", # no duplicates allowed
+            'group_QUANTITY': f'{sum_col}'
+        })
+
+    else:
+        grouped_df = grouped_df.rename(columns={
+            'id_combined': id_col,
+            'display_combined': display_id, # should be distinct from id_col
+            'group_QUANTITY': f'{sum_col}'
+        })
+    
+    return grouped_df
+
+
+
 def process_and_display(
     df,
     lat_col,
@@ -446,6 +472,7 @@ def process_and_display(
     id_col,
     display_id,
     distance_threshold_meters,
+    sum_threshold=None,
     uploaded_file=None,
 ):
     """
@@ -489,23 +516,7 @@ def process_and_display(
             f"Points nearby (within {distance_threshold_feet}ft) others are red."
         )
 
-        # Convert to Excel and offer download
-        df_xlsx = convert_df_to_excel(display_gdf)
-
-        short_file_name = (
-            os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
-        )
-
-        file_name = (
-            f"{short_file_name}_{int(distance_threshold_meters * 3.28084)}ft.xlsx"
-        )
-
-        st.download_button(
-            label=f"📥 Download {file_name}",
-            data=df_xlsx,
-            file_name=file_name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        offer_download(display_gdf,uploaded_file,distance_threshold_feet)
 
         hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
         if hide_null_distance:
@@ -519,7 +530,7 @@ def process_and_display(
         st.info(
             f"{len(filtered_df)}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another."
         )
-        
+
         # Convert specific columns to strings to avoid commas in large numbers
         if 'EQUIP_NUM' in display_gdf.columns:
             display_gdf['EQUIP_NUM'] = display_gdf['EQUIP_NUM'].astype(str)
@@ -529,6 +540,48 @@ def process_and_display(
             display_gdf['EQUI1_NUM'] = display_gdf['EQUI1_NUM'].astype(str)
         display_gdf
 
+        groups_df = create_groups_df(filtered_df, id_col, display_id, sum_col)
+
+        st.info(f"There are {len(groups_df)} groups.")
+
+        if use_sum_threshold:
+            if sum_threshold:
+                filtered_df = filtered_df[filtered_df[f"group_{sum_col}"] >= sum_threshold]
+
+            # Show info about how many groups are above the sum threshold
+            if sum_threshold:
+                unique_groups = len(filtered_df["group_id"].unique())
+                st.info(
+                    f"{unique_groups} groups are above the sum threshold."
+                )
+        
+        groups_df
+
+        offer_download(groups_df,uploaded_file,distance_threshold_feet)
+        
+
+def offer_download(df,uploaded_file,distance_threshold_feet):
+    '''
+    Convert the DataFrame to an Excel file and offer download
+    '''
+    df_xlsx = convert_df_to_excel(df)
+
+    short_file_name = (
+        os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
+    )
+
+    file_name = (
+        f"{short_file_name}_{int(distance_threshold_feet)}ft_groups.xlsx"
+    )
+
+    st.download_button(
+        label=f"📥 Download {file_name}",
+        data=df_xlsx,
+        file_name=file_name,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key=df.shape,
+    )
+    # st.write(df.shape, "rows downloaded.")
 
 # Streamlit UI
 
@@ -558,12 +611,26 @@ with st.sidebar:
         step=10.0,
         format="%f",
     )
-
     # Choose which value to use based on whether the custom value differs from the slider
     distance_threshold_feet = custom_distance_threshold_feet if custom_distance_threshold_feet != distance_threshold_feet else distance_threshold_feet
 
-    # Now convert the chosen distance threshold in feet to meters for processing
+    # Convert the chosen distance threshold in feet to meters for processing
     distance_threshold_meters = distance_threshold_feet* 0.3048
+
+    use_sum_threshold = st.checkbox("Use group sum threshold", value=False)
+
+    if use_sum_threshold:
+        sum_threshold = st.slider(
+            "Group sum threshold",
+            min_value=100,
+            max_value=2000,
+            value=1000,
+            step=100,
+            format="%d",
+        )
+    else:
+        sum_threshold = None
+
 
     lat_col, lon_col, id_col, sum_col, display_id = select_columns(df, uploaded_file)
 
@@ -594,5 +661,5 @@ with st.sidebar:
         "---"
 
 process_and_display(
-    df, lat_col, lon_col, id_col, display_id, distance_threshold_meters, uploaded_file
+    df, lat_col, lon_col, id_col, display_id, distance_threshold_meters, sum_threshold, uploaded_file
 )
