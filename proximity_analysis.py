@@ -121,11 +121,9 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     # take advantage of the GeoDataFrame structure to set the style of the data
     # create a column style containing each feature’s style in a dictionary
     def style_function(row):
-        if pd.isna(row['group_id']): 
+        if pd.isna(row['group_id']) or (use_sum_threshold and row.get('group_sum', 0) < sum_threshold):
             return "gray"
-        else:
-            # st.write(f"found a match at {row[id_col]}")
-            return "red"
+        return "red"
 
     # Add a style column to the gdf
     if "group_id" in gdf.columns: 
@@ -203,8 +201,8 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
             centroid_wgs84 = gpd.GeoSeries([centroid], crs=gdf.crs).to_crs(epsg=4326).iloc[0]
             
             tooltip_text = f"<b>group_id:</b> {int(group_id)}<br><b>{sum_col}:</b> {int(group_points['group_sum'].values[0])}"
-            tooltip_text += f"<br><b>nearby {id_col}s:</b> " + str(group_points[id_col].tolist()).replace("'", "").replace("[", "").replace("]", "")
-            tooltip_text += f"<br><b>nearby {display_id}s:</b> " + str(group_points[display_id].tolist()).replace("'", "").replace("[", "").replace("]", "")
+            tooltip_text += f"<br><b>{id_col}:</b> " + str(group_points[id_col].tolist()).replace("'", "").replace("[", "").replace("]", "")
+            tooltip_text += f"<br><b>{display_id}:</b> " + str(group_points[display_id].tolist()).replace("'", "").replace("[", "").replace("]", "")
 
             # Ensure the centroid is valid before proceeding
             if not centroid_wgs84.is_empty:
@@ -565,12 +563,15 @@ def process_and_display(
 
         # Rename group_sum column to f"group_{sum_col}"
         display_gdf = display_gdf.rename(columns={"group_sum": f"group_{sum_col}"})
-
-        if id_col:
-            st.caption(f"Hover/click on points to view {id_col}")
-        st.caption(
-            f"Points nearby (within {distance_threshold_feet}ft) others are red."
-        )
+        
+        if use_sum_threshold:
+            st.caption(
+                f"Points in groups with {sum_col} greater than {sum_threshold} are red."
+            )
+        else:
+            st.caption(
+                f"Points nearby (within {distance_threshold_feet}ft) others are red."
+            )
 
         offer_download(display_gdf,"xlsx",uploaded_file,distance_threshold_feet)
 
@@ -601,6 +602,7 @@ def process_and_display(
         groups_msg = f"There are {len(groups_df)} groups."
 
         if use_sum_threshold:
+            # Filter groups_df based on sum_threshold
             if sum_threshold:
                 groups_over_threshold = groups_df[groups_df[f"{sum_col}"] >= sum_threshold]
 
@@ -608,10 +610,12 @@ def process_and_display(
             if sum_threshold:
                 unique_groups = len(groups_over_threshold["group_id"].unique())
                 groups_msg += f" {unique_groups} of them are over {sum_threshold} {sum_col}."
-        
+
+            # show only groups over threshold
             groups_over_threshold
 
         else:
+            # otherwise, show all groups
             groups_df
 
         st.info(groups_msg)
