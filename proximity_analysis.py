@@ -191,7 +191,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                 continue  # Skip empty groups
 
             # Calculate the centroid of the group
-            centroid = group_points.geometry.unary_union.centroid
+            centroid = group_points.geometry.union_all().centroid
             
             if centroid.is_empty:
                 continue  # Skip if the centroid is empty
