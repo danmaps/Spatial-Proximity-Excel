@@ -31,7 +31,7 @@ sample_data = {
     "INDEX": [i for i in range(1, num_points + 1)],
     "LAT": np.random.uniform(lat_min, lat_max, num_points),
     "LONG": np.random.uniform(long_min, long_max, num_points),
-    "QUANTITY": np.random.randint(250, 1500, num_points),
+    "QUANTITY": np.random.randint(250, 1100, num_points),
 }
 
 
@@ -135,29 +135,20 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
 
     # Create a GeoJson layer
 
-    if display_id:
-        geojson_layer = folium.GeoJson(
-            gdf,
-            style_function=lambda x: {
-                'markerColor': x['properties']['style'],},
-            marker=folium.Marker(icon=folium.Icon(icon='circle', prefix='fa',)),
-            popup=folium.GeoJsonPopup(fields=[display_id, id_col, sum_col, "group_id"], localize=True),
-            tooltip=folium.GeoJsonTooltip(
-                fields=[display_id, id_col, sum_col, "group_id"], localize=True
-            )
-        ).add_to(m)
+    # Determine fields for popup and tooltip based on whether display_id is provided
+    common_fields = [id_col, sum_col, "group_id"]
+    fields = [display_id] + common_fields if display_id else common_fields
 
-    else: # if no display_id, skip trying to add it to the popup and tooltip
-        geojson_layer = folium.GeoJson(
-            gdf,
-            style_function=lambda x: {
-                'markerColor': x['properties']['style'],},
-            marker=folium.Marker(icon=folium.Icon(icon='circle', prefix='fa',)),
-            popup=folium.GeoJsonPopup(fields=[id_col, sum_col, "group_id"], localize=True),
-            tooltip=folium.GeoJsonTooltip(
-                fields=[id_col, sum_col, "group_id"], localize=True
-            )
-        ).add_to(m)
+    # Create the GeoJson layer with the conditional fields
+    geojson_layer = folium.GeoJson(
+        gdf,
+        style_function=lambda x: {
+            'markerColor': x['properties']['style'],
+        },
+        marker=folium.Marker(icon=folium.Icon(icon='circle', prefix='fa')),
+        popup=folium.GeoJsonPopup(fields=fields, localize=True),
+        tooltip=folium.GeoJsonTooltip(fields=fields, localize=True)
+    ).add_to(m)
 
 
     # Add search functionality
@@ -371,9 +362,6 @@ def identify_clusters(df, id_col, display_id=None, sum_col=None):
     if id_col:
         df = df.drop_duplicates(subset=[id_col])
 
-    df = df.copy()
-    df["group_id"] = np.nan
-
     if display_id or id_col:
         col_to_use = display_id if display_id else id_col
 
@@ -390,9 +378,8 @@ def identify_clusters(df, id_col, display_id=None, sum_col=None):
             if i in uf.parent:
                 df.loc[i, "group_id"] = uf.find(i)
                 
-        # Normalize group IDs to start from 0
-        group_id_map = {old_id: new_id for new_id, old_id in enumerate(sorted(df["group_id"].dropna().unique()))}
-        df["group_id"] = df["group_id"].map(group_id_map)
+        # Normalize group IDs to start from 1
+        df["group_id"] = df["group_id"].dropna().rank(method="dense").astype(int)
 
     else:
         return df.drop(columns=["group_id"])
@@ -404,6 +391,23 @@ def identify_clusters(df, id_col, display_id=None, sum_col=None):
         group_sum = df.loc[df["group_id"] == group_id, sum_col].sum()
         df.loc[df["group_id"] == group_id, "group_sum"] = group_sum
 
+    df.reset_index(drop=True, inplace=True)
+
+    if use_sum_threshold:
+
+        # Handle "singleton clusters" (spatially isolated points that exceed the sum threshold)
+        new_group_id = df["group_id"].max() + 1 if pd.notna(df["group_id"].max()) else 1
+        # st.write(new_group_id)
+
+
+        # Add group IDs to singleton groups
+        for i, row in df.iterrows():
+            # st.write(i, row[sum_col])
+            if pd.isna(row[f"nearby_{id_col}"]) and pd.notna(row[sum_col]) and row[sum_col] >= sum_threshold:
+                # st.write(i, row[sum_col])
+                df.loc[i, "group_id"] = new_group_id
+                df.loc[i, "group_sum"] = row[sum_col]
+                new_group_id += 1  # Increment the group ID for the next singleton group
     return df
 
 
@@ -483,6 +487,18 @@ def select_columns(df, uploaded_file):
 
 
 def create_groups_df(gdf,id_col,display_id,sum_col):
+    """
+    Group the input GeoDataFrame by 'group_id' and aggregate the columns based on the provided IDs and display IDs.
+    
+    Args:
+        gdf (GeoDataFrame): The input GeoDataFrame to group and aggregate.
+        id_col (str): The column name representing the unique ID to combine.
+        display_id (str): The column name representing the display ID to combine.
+        sum_col (str): The column name for which the sum is calculated for each cluster.
+        
+    Returns:
+        GeoDataFrame: The grouped and aggregated GeoDataFrame with renamed columns.
+    """
     
     # Group by 'group_id' and aggregate
     grouped_df = gdf.groupby('group_id').agg(
@@ -491,21 +507,16 @@ def create_groups_df(gdf,id_col,display_id,sum_col):
         group_QUANTITY=(f'group_{sum_col}', 'first')
     ).reset_index()
 
-    # Rename columns
-    if not uploaded_file:
-        grouped_df = grouped_df.rename(columns={
-            'id_combined': id_col+"_id", # no duplicates allowed
-            'display_combined': display_id+"_display", # no duplicates allowed
-            'group_QUANTITY': f'{sum_col}'
-        })
+    # Determine the column renaming based on whether a file is uploaded
+    rename_mapping = {
+        'id_combined': id_col + ("_id" if not uploaded_file else ""),
+        'display_combined': display_id + ("_display" if not uploaded_file else ""),
+        'group_QUANTITY': sum_col
+    }
 
-    else:
-        grouped_df = grouped_df.rename(columns={
-            'id_combined': id_col,
-            'display_combined': display_id, # should be distinct from id_col
-            'group_QUANTITY': f'{sum_col}'
-        })
-    
+    # Rename columns
+    grouped_df = grouped_df.rename(columns=rename_mapping)
+
     return grouped_df
 
 
@@ -561,7 +572,7 @@ def process_and_display(
             f"Points nearby (within {distance_threshold_feet}ft) others are red."
         )
 
-        offer_download(display_gdf,uploaded_file,distance_threshold_feet)
+        offer_download(display_gdf,"xlsx",uploaded_file,distance_threshold_feet)
 
         hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
         if hide_null_distance:
@@ -585,7 +596,7 @@ def process_and_display(
             display_gdf['EQUI1_NUM'] = display_gdf['EQUI1_NUM'].astype(str)
         display_gdf
 
-        groups_df = create_groups_df(filtered_df, id_col, display_id, sum_col)
+        groups_df = create_groups_df(display_gdf, id_col, display_id, sum_col)
 
         groups_msg = f"There are {len(groups_df)} groups."
 
@@ -605,32 +616,44 @@ def process_and_display(
 
         st.info(groups_msg)
 
-
-        offer_download(groups_df,uploaded_file,distance_threshold_feet,"_groups")
+        offer_download(groups_df,"xlsx",uploaded_file,distance_threshold_feet,"_groups")
         
 
-def offer_download(df,uploaded_file,distance_threshold_feet,groups=""):
+def offer_download(df,format,uploaded_file,distance_threshold_feet,groups=""):
     '''
-    Convert the DataFrame to an Excel file and offer download
+    Convert the DataFrame to a file and offer download
     '''
-    df_xlsx = convert_df_to_excel(df)
+    if format == 'xlsx':
+        df_file = convert_df_to_excel(df)
+    elif format == 'geojson':
+        df_file = df.to_file(f"{uploaded_file.name.split('.')[0]}.geojson", driver="GeoJSON")
 
     short_file_name = (
         os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
     )
 
     file_name = (
-        f"{short_file_name}_{int(distance_threshold_feet)}ft{groups}.xlsx"
+        f"{short_file_name}_{int(distance_threshold_feet)}ft{groups}.{format}"
     )
+    if format == 'xlsx':
+        st.download_button(
+            label=f"📥 {file_name}",
+            data=df_file,
+            file_name=file_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key=df.shape,
+            help=f"Click to download {file_name}",
+        )
+    elif format == 'geojson':
+        st.download_button(
+            label=f"📥 {file_name}",
+            data=df_file,
+            file_name=file_name,
+            mime="application/octet-stream",
+            key=df.shape,
+            help=f"Click to download {file_name}",
+        )
 
-    st.download_button(
-        label=f"📥 {file_name}",
-        data=df_xlsx,
-        file_name=file_name,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key=df.shape,
-        help=f"Click to download {file_name}",
-    )
 
 # Streamlit UI
 
