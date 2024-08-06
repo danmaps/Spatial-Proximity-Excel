@@ -31,7 +31,7 @@ sample_data = {
     "INDEX": [i for i in range(1, num_points + 1)],
     "LAT": np.random.uniform(lat_min, lat_max, num_points),
     "LONG": np.random.uniform(long_min, long_max, num_points),
-    "QUANTITY": np.random.randint(250, 1100, num_points),
+    "QUANTITY": np.random.randint(0, 1050, num_points),
 }
 
 
