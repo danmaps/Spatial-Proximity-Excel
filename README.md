@@ -8,7 +8,9 @@ This tool is designed to perform spatial proximity analysis on Excel spreadsheet
 - **Geographic Insights**: Generate insights based on spatial relationships in your data.
 - **Excel Integration**: Seamlessly works with Excel files for input and output.
 
-Access it tool [here](https://spatial-proximity-excel.streamlit.app/) or read on to run locally.
+Access it [here](https://spatial-proximity-excel.streamlit.app/) or read on to run locally.
+
+![image](https://github.com/user-attachments/assets/4cceca3f-826b-49d7-bda8-4f0cacfb91b7)
 
 ## Prerequisites
 
