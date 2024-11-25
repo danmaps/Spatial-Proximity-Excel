@@ -547,80 +547,80 @@ def process_and_display(
         processed_gdf = process_data(
             df, lat_col, lon_col, distance_threshold_meters, id_col, display_id
         )
+        if id_col and display_id:
+            processed_gdf = identify_clusters(processed_gdf, id_col, display_id, sum_col)
+            display_gdf = processed_gdf.drop(columns=["geometry"])
 
-        processed_gdf = identify_clusters(processed_gdf, id_col, display_id, sum_col)
-        display_gdf = processed_gdf.drop(columns=["geometry"])
+            # Create and display the map
+            if id_col:
+                folium_static(
+                    create_folium_map(
+                        processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
+                    ),width=1000,height=500
+                )
+            else:
+                st.warning("choose a unique ID column")
 
-        # Create and display the map
-        if id_col:
-            folium_static(
-                create_folium_map(
-                    processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
-                ),width=1000,height=500
+            # Rename group_sum column to f"group_{sum_col}"
+            display_gdf = display_gdf.rename(columns={"group_sum": f"group_{sum_col}"})
+            
+            if use_sum_threshold:
+                st.caption(
+                    f"Points in groups with {sum_col} greater than {sum_threshold} are red."
+                )
+            else:
+                st.caption(
+                    f"Points nearby (within {distance_threshold_feet}ft) others are red."
+                )
+
+            offer_download(display_gdf,"xlsx",uploaded_file,distance_threshold_feet)
+
+            hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
+            if hide_null_distance:
+                display_gdf = display_gdf.dropna(subset=["distance_feet"])
+            filtered_df = processed_gdf.dropna(subset=["distance_feet"])
+
+            # Rename group_sum column to f"group_{sum_col}"
+            filtered_df = filtered_df.rename(columns={"group_sum": f"group_{sum_col}"})
+
+            # Display the processed DataFrame
+            st.info(
+                f"{len(filtered_df)}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another."
             )
-        else:
-            st.warning("choose a unique ID column")
 
-        # Rename group_sum column to f"group_{sum_col}"
-        display_gdf = display_gdf.rename(columns={"group_sum": f"group_{sum_col}"})
-        
-        if use_sum_threshold:
-            st.caption(
-                f"Points in groups with {sum_col} greater than {sum_threshold} are red."
-            )
-        else:
-            st.caption(
-                f"Points nearby (within {distance_threshold_feet}ft) others are red."
-            )
+            # Convert specific columns to strings to avoid commas in large numbers
+            if 'EQUIP_NUM' in display_gdf.columns:
+                display_gdf['EQUIP_NUM'] = display_gdf['EQUIP_NUM'].astype(str)
+            if 'nearby_EQUIP_NUM' in display_gdf.columns:
+                display_gdf['nearby_EQUIP_NUM'] = display_gdf['nearby_EQUIP_NUM'].astype(str)
+            if 'EQUI1_NUM' in display_gdf.columns:
+                display_gdf['EQUI1_NUM'] = display_gdf['EQUI1_NUM'].astype(str)
+            display_gdf
 
-        offer_download(display_gdf,"xlsx",uploaded_file,distance_threshold_feet)
+            groups_df = create_groups_df(display_gdf, id_col, display_id, sum_col)
 
-        hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
-        if hide_null_distance:
-            display_gdf = display_gdf.dropna(subset=["distance_feet"])
-        filtered_df = processed_gdf.dropna(subset=["distance_feet"])
+            groups_msg = f"There are {len(groups_df)} groups."
 
-        # Rename group_sum column to f"group_{sum_col}"
-        filtered_df = filtered_df.rename(columns={"group_sum": f"group_{sum_col}"})
+            if use_sum_threshold:
+                # Filter groups_df based on sum_threshold
+                if sum_threshold:
+                    groups_over_threshold = groups_df[groups_df[f"{sum_col}"] >= sum_threshold]
 
-        # Display the processed DataFrame
-        st.info(
-            f"{len(filtered_df)}/{len(df)} points are nearby (within {int(distance_threshold_feet)}ft of) another."
-        )
+                # Show info about how many groups are above the sum threshold
+                if sum_threshold:
+                    unique_groups = len(groups_over_threshold["group_id"].unique())
+                    groups_msg += f" {unique_groups} of them are over {sum_threshold} {sum_col}."
 
-        # Convert specific columns to strings to avoid commas in large numbers
-        if 'EQUIP_NUM' in display_gdf.columns:
-            display_gdf['EQUIP_NUM'] = display_gdf['EQUIP_NUM'].astype(str)
-        if 'nearby_EQUIP_NUM' in display_gdf.columns:
-            display_gdf['nearby_EQUIP_NUM'] = display_gdf['nearby_EQUIP_NUM'].astype(str)
-        if 'EQUI1_NUM' in display_gdf.columns:
-            display_gdf['EQUI1_NUM'] = display_gdf['EQUI1_NUM'].astype(str)
-        display_gdf
+                # show only groups over threshold
+                groups_over_threshold
 
-        groups_df = create_groups_df(display_gdf, id_col, display_id, sum_col)
+            else:
+                # otherwise, show all groups
+                groups_df
 
-        groups_msg = f"There are {len(groups_df)} groups."
+            st.info(groups_msg)
 
-        if use_sum_threshold:
-            # Filter groups_df based on sum_threshold
-            if sum_threshold:
-                groups_over_threshold = groups_df[groups_df[f"{sum_col}"] >= sum_threshold]
-
-            # Show info about how many groups are above the sum threshold
-            if sum_threshold:
-                unique_groups = len(groups_over_threshold["group_id"].unique())
-                groups_msg += f" {unique_groups} of them are over {sum_threshold} {sum_col}."
-
-            # show only groups over threshold
-            groups_over_threshold
-
-        else:
-            # otherwise, show all groups
-            groups_df
-
-        st.info(groups_msg)
-
-        offer_download(groups_df,"xlsx",uploaded_file,distance_threshold_feet,"_groups")
+            offer_download(groups_df,"xlsx",uploaded_file,distance_threshold_feet,"_groups")
         
 
 def offer_download(df,format,uploaded_file,distance_threshold_feet,groups=""):
