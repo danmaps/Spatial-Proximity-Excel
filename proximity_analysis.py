@@ -7,6 +7,7 @@ from folium import plugins
 from streamlit_folium import folium_static
 import os
 import numpy as np
+import geojson
 
 
 st.set_page_config(
@@ -207,8 +208,13 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
             tooltip_text += f"<br><b>{id_col}:</b> " + str(group_points[id_col].tolist()).replace("'", "").replace("[", "").replace("]", "")
             tooltip_text += f"<br><b>{display_id}:</b> " + str(group_points[display_id].tolist()).replace("'", "").replace("[", "").replace("]", "")
 
+            # create a list of GeoJson objects
+            groups_geojson = []
+            # Create a FeatureCollection
+            feature_collection = geojson.FeatureCollection(groups_geojson)
             # Ensure the centroid is valid before proceeding
             if not centroid_wgs84.is_empty:
+                groups_geojson.append(
                 folium.Circle(
                     location=[centroid_wgs84.y, centroid_wgs84.x],
                     radius=max_distance,
@@ -217,7 +223,12 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     fill=True,
                     tooltip=tooltip_text,
                     popup=folium.Popup(tooltip_text, parse_html=False),
-                ).add_to(m)
+                ))
+            for circle in groups_geojson:
+                circle.add_to(m)
+            offer_download(feature_collection, "geojson", "sample_data.xlsx", distance_threshold_meters)
+
+
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
@@ -633,7 +644,10 @@ def offer_download(df,format,uploaded_file,distance_threshold_feet,groups=""):
     if format == 'xlsx':
         df_file = convert_df_to_excel(df)
     elif format == 'geojson':
-        df_file = df.to_file(f"{uploaded_file.name.split('.')[0]}.geojson", driver="GeoJSON")
+        # df_file = df.to_file(f"{uploaded_file.name.split('.')[0]}.geojson", driver="GeoJSON")
+        # Save the merged GeoJSON to a file
+        with open(f"{uploaded_file.split('.')[0]}.geojson", 'w') as f:
+            geojson.dump(df, f)
     elif format == 'csv':
         df_file = convert_df_to_csv(df)
 

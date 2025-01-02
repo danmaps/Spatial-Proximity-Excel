@@ -9,3 +9,4 @@ rtree
 xlsxwriter
 folium
 streamlit-folium
+geojson
