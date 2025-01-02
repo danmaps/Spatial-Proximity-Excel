@@ -583,7 +583,7 @@ def process_and_display(
                             # Use the same naming convention as other downloads
                             short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
                             base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles"
-                            base_path = os.path.join(tmpdir, base_name)
+                            shp_path = os.path.join(tmpdir, base_name)
                             
                             # Convert to WGS84 before saving
                             circles_gdf_wgs84 = circles_gdf.to_crs(epsg=4326)
@@ -591,20 +591,20 @@ def process_and_display(
                             # Ensure the geometry is valid
                             circles_gdf_wgs84['geometry'] = circles_gdf_wgs84['geometry'].buffer(0)
                             
-                            # Save with explicit driver
-                            circles_gdf_wgs84.to_file(base_path, driver='ESRI Shapefile')
+                            # Save shapefile components to temporary directory
+                            circles_gdf_wgs84.to_file(shp_path, driver='ESRI Shapefile')
                             
                             # Create BytesIO object to store the zip
                             zip_buffer = BytesIO()
                             
                             # Create zip file in memory
                             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                                # Add each shapefile component to the zip
+                                # Add all shapefile components to zip
                                 for filename in os.listdir(tmpdir):
                                     file_path = os.path.join(tmpdir, filename)
                                     if os.path.exists(file_path):
-                                        with open(file_path, 'rb') as f:
-                                            zipf.writestr(filename, f.read())
+                                        # Add file to zip with just the filename (no path)
+                                        zipf.write(file_path, filename)
                             
                             # Get the zip data
                             zip_buffer.seek(0)
