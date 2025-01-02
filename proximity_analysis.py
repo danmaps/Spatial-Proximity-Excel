@@ -121,9 +121,8 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     if 'nearby_EQUIP_NUM' in gdf.columns:
         gdf['nearby_EQUIP_NUM'] = gdf['nearby_EQUIP_NUM'].astype(str)
 
-    
     # take advantage of the GeoDataFrame structure to set the style of the data
-    # create a column style containing each feature’s style in a dictionary
+    # create a column style containing each feature's style in a dictionary
     def style_function(row):
         if pd.isna(row['group_id']) or (use_sum_threshold and row.get('group_sum', 0) < sum_threshold):
             return "gray"
@@ -136,7 +135,6 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         gdf['style'] = "gray"
 
     # Create a GeoJson layer
-
     # Determine fields for popup and tooltip based on whether display_id is provided
     common_fields = [id_col, sum_col, "group_id"]
     fields = [display_id] + common_fields if display_id else common_fields
@@ -152,7 +150,6 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         tooltip=folium.GeoJsonTooltip(fields=fields, localize=True)
     ).add_to(m)
 
-
     # Add search functionality
     search = folium.plugins.Search(
         layer=geojson_layer,
@@ -162,23 +159,11 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         search_label=id_col,
     ).add_to(m)
 
-    # # Add buffers to the map
-    # for _, row in gdf.iterrows():
-    #     color = "red" if pd.notnull(row["distance_feet"]) else "white"
-    #     tooltip_text = create_tooltip(row, gdf, id_col, sum_col)
-        
-    #     folium.Circle(
-    #         location=[row[lat_col], row[lon_col]],
-    #         radius=distance_threshold_meters,
-    #         color=color,
-    #         weight=2,
-    #         fill=True,
-    #         # tooltip=tooltip_text,
-    #         popup=folium.Popup(tooltip_text, parse_html=False),
-    #     ).add_to(m)
-
     # Reproject the GeoDataFrame to a suitable projected CRS (e.g., UTM)
-    gdf = gdf.to_crs(epsg=32611)  # Example EPSG code for UTM zone 11N
+    gdf = gdf.to_crs(epsg=32611)
+
+    # Create a list to store circle features
+    circle_features = []
 
     # Add a minimum bounding circle to the points by group_id
     if "group_id" in gdf.columns:
@@ -208,13 +193,9 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
             tooltip_text += f"<br><b>{id_col}:</b> " + str(group_points[id_col].tolist()).replace("'", "").replace("[", "").replace("]", "")
             tooltip_text += f"<br><b>{display_id}:</b> " + str(group_points[display_id].tolist()).replace("'", "").replace("[", "").replace("]", "")
 
-            # create a list of GeoJson objects
-            groups_geojson = []
-            # Create a FeatureCollection
-            feature_collection = geojson.FeatureCollection(groups_geojson)
-            # Ensure the centroid is valid before proceeding
+            # Create a circle feature for GeoJSON
             if not centroid_wgs84.is_empty:
-                groups_geojson.append(
+                # Create a circle for the map
                 folium.Circle(
                     location=[centroid_wgs84.y, centroid_wgs84.x],
                     radius=max_distance,
@@ -223,12 +204,24 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     fill=True,
                     tooltip=tooltip_text,
                     popup=folium.Popup(tooltip_text, parse_html=False),
-                ))
-            for circle in groups_geojson:
-                circle.add_to(m)
-            offer_download(feature_collection, "geojson", "sample_data.xlsx", distance_threshold_meters)
+                ).add_to(m)
 
-
+                # Create a feature for the GeoJSON file
+                circle_feature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [centroid_wgs84.x, centroid_wgs84.y]
+                    },
+                    "properties": {
+                        "group_id": int(group_id),
+                        "radius_meters": float(max_distance),
+                        "sum_value": float(group_points['group_sum'].values[0]),
+                        "point_ids": str(group_points[id_col].tolist()),
+                        "display_ids": str(group_points[display_id].tolist())
+                    }
+                }
+                circle_features.append(circle_feature)
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
@@ -241,7 +234,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         force_separate_button=True,
     ).add_to(m)
 
-    return m
+    return m, circle_features
 
 
 # Main processing function
@@ -567,11 +560,20 @@ def process_and_display(
 
             # Create and display the map
             if id_col:
-                folium_static(
-                    create_folium_map(
-                        processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
-                    ),width=1000,height=500
+                m, circle_features = create_folium_map(
+                    processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
                 )
+                folium_static(m, width=1000, height=500)
+
+                # Create a FeatureCollection for the circles
+                if circle_features:
+                    circles_geojson = {
+                        "type": "FeatureCollection",
+                        "features": circle_features
+                    }
+                    # Offer download of the circles GeoJSON below the map
+                    st.caption("Download the minimum bounding circles as GeoJSON:")
+                    offer_download(circles_geojson, "geojson", uploaded_file, distance_threshold_feet, "_circles")
             else:
                 st.warning("choose a unique ID column")
 
@@ -637,17 +639,15 @@ def process_and_display(
             offer_download(groups_df,"csv",uploaded_file,distance_threshold_feet,"_groups")
         
 
-def offer_download(df,format,uploaded_file,distance_threshold_feet,groups=""):
+def offer_download(df, format, uploaded_file, distance_threshold_feet, groups=""):
     '''
     Convert the DataFrame to a file and offer download
     '''
     if format == 'xlsx':
         df_file = convert_df_to_excel(df)
     elif format == 'geojson':
-        # df_file = df.to_file(f"{uploaded_file.name.split('.')[0]}.geojson", driver="GeoJSON")
-        # Save the merged GeoJSON to a file
-        with open(f"{uploaded_file.split('.')[0]}.geojson", 'w') as f:
-            geojson.dump(df, f)
+        # Convert the GeoJSON to a string
+        df_file = geojson.dumps(df, indent=2)
     elif format == 'csv':
         df_file = convert_df_to_csv(df)
 
@@ -672,8 +672,8 @@ def offer_download(df,format,uploaded_file,distance_threshold_feet,groups=""):
             label=f"📥 {file_name}",
             data=df_file,
             file_name=file_name,
-            mime="application/octet-stream",
-            key=df.shape,
+            mime="application/geo+json",
+            key=str(df),
             help=f"Click to download {file_name}",
         )
     elif format == 'csv':
