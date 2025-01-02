@@ -78,6 +78,9 @@ def convert_df_to_excel(_df):
     processed_data = output.getvalue()
     return processed_data
 
+def convert_df_to_csv(_df):
+    return _df.to_csv(index=False)    
+
 
 def get_bounds(gdf):
     bounds = gdf.total_bounds
@@ -632,7 +635,7 @@ def offer_download(df,format,uploaded_file,distance_threshold_feet,groups=""):
     elif format == 'geojson':
         df_file = df.to_file(f"{uploaded_file.name.split('.')[0]}.geojson", driver="GeoJSON")
     elif format == 'csv':
-        df_file = df.to_csv(f"{uploaded_file.name.split('.')[0]}.csv")
+        df_file = convert_df_to_csv(df)
 
     short_file_name = (
         os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
