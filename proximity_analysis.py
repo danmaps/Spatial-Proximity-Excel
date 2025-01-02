@@ -600,11 +600,13 @@ def process_and_display(
                             # Create zip file in memory
                             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
                                 # Add all shapefile components to zip
-                                for filename in os.listdir(tmpdir):
-                                    file_path = os.path.join(tmpdir, filename)
+                                for ext in ['.shp', '.shx', '.dbf', '.prj']:
+                                    file_path = shp_path + ext
                                     if os.path.exists(file_path):
                                         # Add file to zip with just the filename (no path)
-                                        zipf.write(file_path, filename)
+                                        arcname = f"{base_name}{ext}"
+                                        with open(file_path, 'rb') as f:
+                                            zipf.writestr(arcname, f.read())
                             
                             # Get the zip data
                             zip_buffer.seek(0)
