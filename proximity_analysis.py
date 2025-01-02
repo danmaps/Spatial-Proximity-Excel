@@ -573,7 +573,7 @@ def process_and_display(
                     f"Points nearby (within {distance_threshold_feet}ft) others are red."
                 )
 
-            offer_download(display_gdf,"xlsx",uploaded_file,distance_threshold_feet)
+            offer_download(display_gdf,"csv",uploaded_file,distance_threshold_feet,"_grouped")
 
             hide_null_distance = st.checkbox("Hide rows with no nearby point", value=True)
             if hide_null_distance:
@@ -620,7 +620,7 @@ def process_and_display(
 
             st.info(groups_msg)
 
-            offer_download(groups_df,"xlsx",uploaded_file,distance_threshold_feet,"_groups")
+            offer_download(groups_df,"csv",uploaded_file,distance_threshold_feet,"_groups")
         
 
 def offer_download(df,format,uploaded_file,distance_threshold_feet,groups=""):
@@ -631,6 +631,8 @@ def offer_download(df,format,uploaded_file,distance_threshold_feet,groups=""):
         df_file = convert_df_to_excel(df)
     elif format == 'geojson':
         df_file = df.to_file(f"{uploaded_file.name.split('.')[0]}.geojson", driver="GeoJSON")
+    elif format == 'csv':
+        df_file = df.to_csv(f"{uploaded_file.name.split('.')[0]}.csv")
 
     short_file_name = (
         os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
@@ -654,6 +656,15 @@ def offer_download(df,format,uploaded_file,distance_threshold_feet,groups=""):
             data=df_file,
             file_name=file_name,
             mime="application/octet-stream",
+            key=df.shape,
+            help=f"Click to download {file_name}",
+        )
+    elif format == 'csv':
+        st.download_button(
+            label=f"📥 {file_name}",
+            data=df_file,
+            file_name=file_name,
+            mime="text/csv",
             key=df.shape,
             help=f"Click to download {file_name}",
         )
