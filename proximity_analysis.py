@@ -575,13 +575,15 @@ def process_and_display(
                 folium_static(m, width=1000, height=500)
 
                 # 2. Offer shapefile download for circles
+                short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
+
                 if circles_gdf is not None:
                     st.caption("Download the minimum bounding circles:")
                     # Create a temporary directory for the shapefile
                     with tempfile.TemporaryDirectory() as tmpdir:
                         try:
                             # Save the shapefile with a complete filename
-                            shp_filename = "circles.shp"
+                            shp_filename = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles.shp"
                             base_path = os.path.join(tmpdir, shp_filename)
                             
                             # Convert to WGS84 before saving
@@ -612,7 +614,6 @@ def process_and_display(
                             # Offer download if zip has content
                             if len(zip_data) > 100:  # Basic size check
                                 # Offer download
-                                short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
                                 file_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles.zip"
                                 
                                 st.download_button(
