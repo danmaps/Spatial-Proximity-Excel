@@ -579,32 +579,53 @@ def process_and_display(
                     st.caption("Download the minimum bounding circles:")
                     # Create a temporary directory for the shapefile
                     with tempfile.TemporaryDirectory() as tmpdir:
-                        # Save the shapefile
-                        shp_path = os.path.join(tmpdir, "circles")
-                        circles_gdf.to_file(shp_path)
-                        
-                        # Create a zip file containing all shapefile components
-                        zip_path = os.path.join(tmpdir, "circles.zip")
-                        with zipfile.ZipFile(zip_path, 'w') as zipf:
-                            for ext in ['.shp', '.shx', '.dbf', '.prj']:
-                                file_path = shp_path + ext
-                                if os.path.exists(file_path):
-                                    zipf.write(file_path, os.path.basename(file_path))
-                        
-                        # Read the zip file
-                        with open(zip_path, 'rb') as f:
-                            zip_data = f.read()
-                        
-                        # Offer download
-                        short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
-                        file_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles.zip"
-                        st.download_button(
-                            label=f"📥 {file_name}",
-                            data=zip_data,
-                            file_name=file_name,
-                            mime="application/zip",
-                            help=f"Click to download the circles shapefile"
-                        )
+                        try:
+                            # Save the shapefile with a complete filename
+                            shp_filename = "circles.shp"
+                            base_path = os.path.join(tmpdir, shp_filename)
+                            
+                            # Convert to WGS84 before saving
+                            circles_gdf_wgs84 = circles_gdf.to_crs(epsg=4326)
+                            
+                            # Ensure the geometry is valid
+                            circles_gdf_wgs84['geometry'] = circles_gdf_wgs84['geometry'].buffer(0)
+                            
+                            # Save with explicit driver
+                            circles_gdf_wgs84.to_file(base_path, driver='ESRI Shapefile')
+                            
+                            # Create BytesIO object to store the zip
+                            zip_buffer = BytesIO()
+                            
+                            # Create zip file in memory
+                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                                # Add each shapefile component to the zip
+                                for filename in os.listdir(tmpdir):
+                                    file_path = os.path.join(tmpdir, filename)
+                                    if os.path.exists(file_path):
+                                        with open(file_path, 'rb') as f:
+                                            zipf.writestr(filename, f.read())
+                            
+                            # Get the zip data
+                            zip_buffer.seek(0)
+                            zip_data = zip_buffer.getvalue()
+                            
+                            # Offer download if zip has content
+                            if len(zip_data) > 100:  # Basic size check
+                                # Offer download
+                                short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
+                                file_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles.zip"
+                                
+                                st.download_button(
+                                    label=f"📥 {file_name}",
+                                    data=zip_data,
+                                    file_name=file_name,
+                                    mime="application/zip",
+                                    key=f"shp_download_{short_file_name}_{distance_threshold_feet}",
+                                    help=f"Click to download the circles shapefile"
+                                )
+                            
+                        except Exception as e:
+                            st.error("Error creating shapefile. Please try again or contact support.")
                 
                 st.markdown("---")
 
