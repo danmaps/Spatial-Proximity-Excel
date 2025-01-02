@@ -8,6 +8,8 @@ from streamlit_folium import folium_static
 import os
 import numpy as np
 import geojson
+import tempfile
+import zipfile
 
 
 st.set_page_config(
@@ -122,7 +124,6 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         gdf['nearby_EQUIP_NUM'] = gdf['nearby_EQUIP_NUM'].astype(str)
 
     # take advantage of the GeoDataFrame structure to set the style of the data
-    # create a column style containing each feature's style in a dictionary
     def style_function(row):
         if pd.isna(row['group_id']) or (use_sum_threshold and row.get('group_sum', 0) < sum_threshold):
             return "gray"
@@ -162,8 +163,8 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     # Reproject the GeoDataFrame to a suitable projected CRS (e.g., UTM)
     gdf = gdf.to_crs(epsg=32611)
 
-    # Create a list to store circle features
-    circle_features = []
+    # Create lists to store circle features and data
+    circle_data = []
 
     # Add a minimum bounding circle to the points by group_id
     if "group_id" in gdf.columns:
@@ -193,7 +194,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
             tooltip_text += f"<br><b>{id_col}:</b> " + str(group_points[id_col].tolist()).replace("'", "").replace("[", "").replace("]", "")
             tooltip_text += f"<br><b>{display_id}:</b> " + str(group_points[display_id].tolist()).replace("'", "").replace("[", "").replace("]", "")
 
-            # Create a circle feature for GeoJSON
+            # Create a circle feature for the map and shapefile
             if not centroid_wgs84.is_empty:
                 # Create a circle for the map
                 folium.Circle(
@@ -206,22 +207,20 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     popup=folium.Popup(tooltip_text, parse_html=False),
                 ).add_to(m)
 
-                # Create a feature for the GeoJSON file
-                circle_feature = {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [centroid_wgs84.x, centroid_wgs84.y]
-                    },
-                    "properties": {
-                        "group_id": int(group_id),
-                        "radius_meters": float(max_distance),
-                        "sum_value": float(group_points['group_sum'].values[0]),
-                        "point_ids": str(group_points[id_col].tolist()),
-                        "display_ids": str(group_points[display_id].tolist())
-                    }
-                }
-                circle_features.append(circle_feature)
+                # Create a circle polygon for the shapefile
+                circle_data.append({
+                    'geometry': centroid.buffer(max_distance),
+                    'group_id': int(group_id),
+                    'sum_value': float(group_points['group_sum'].values[0]),
+                    'point_ids': str(group_points[id_col].tolist()),
+                    'display_ids': str(group_points[display_id].tolist())
+                })
+
+    # Create a GeoDataFrame with the circle polygons
+    if circle_data:
+        circles_gdf = gpd.GeoDataFrame(circle_data, crs=gdf.crs)
+    else:
+        circles_gdf = None
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
@@ -234,7 +233,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         force_separate_button=True,
     ).add_to(m)
 
-    return m, circle_features
+    return m, circles_gdf
 
 
 # Main processing function
@@ -560,7 +559,7 @@ def process_and_display(
 
             # 1. Create and display the map
             if id_col:
-                m, circle_features = create_folium_map(
+                m, circles_gdf = create_folium_map(
                     processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
                 )
                 
@@ -575,14 +574,37 @@ def process_and_display(
                 
                 folium_static(m, width=1000, height=500)
 
-                # 2. Offer GeoJSON download for circles
-                if circle_features:
-                    circles_geojson = {
-                        "type": "FeatureCollection",
-                        "features": circle_features
-                    }
+                # 2. Offer shapefile download for circles
+                if circles_gdf is not None:
                     st.caption("Download the minimum bounding circles:")
-                    offer_download(circles_geojson, "geojson", uploaded_file, distance_threshold_feet, "_circles")
+                    # Create a temporary directory for the shapefile
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        # Save the shapefile
+                        shp_path = os.path.join(tmpdir, "circles")
+                        circles_gdf.to_file(shp_path)
+                        
+                        # Create a zip file containing all shapefile components
+                        zip_path = os.path.join(tmpdir, "circles.zip")
+                        with zipfile.ZipFile(zip_path, 'w') as zipf:
+                            for ext in ['.shp', '.shx', '.dbf', '.prj']:
+                                file_path = shp_path + ext
+                                if os.path.exists(file_path):
+                                    zipf.write(file_path, os.path.basename(file_path))
+                        
+                        # Read the zip file
+                        with open(zip_path, 'rb') as f:
+                            zip_data = f.read()
+                        
+                        # Offer download
+                        short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
+                        file_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles.zip"
+                        st.download_button(
+                            label=f"📥 {file_name}",
+                            data=zip_data,
+                            file_name=file_name,
+                            mime="application/zip",
+                            help=f"Click to download the circles shapefile"
+                        )
                 
                 st.markdown("---")
 
