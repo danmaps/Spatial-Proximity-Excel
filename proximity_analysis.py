@@ -580,10 +580,9 @@ def process_and_display(
                     # Create a temporary directory for the shapefile
                     with tempfile.TemporaryDirectory() as tmpdir:
                         try:
-                            # Use the same naming convention as other downloads
-                            short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
-                            base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles"
-                            shp_path = os.path.join(tmpdir, base_name)
+                            # Save the shapefile with a complete filename
+                            shp_filename = "circles.shp"
+                            base_path = os.path.join(tmpdir, shp_filename)
                             
                             # Convert to WGS84 before saving
                             circles_gdf_wgs84 = circles_gdf.to_crs(epsg=4326)
@@ -591,22 +590,20 @@ def process_and_display(
                             # Ensure the geometry is valid
                             circles_gdf_wgs84['geometry'] = circles_gdf_wgs84['geometry'].buffer(0)
                             
-                            # Save shapefile components to temporary directory
-                            circles_gdf_wgs84.to_file(shp_path, driver='ESRI Shapefile')
+                            # Save with explicit driver
+                            circles_gdf_wgs84.to_file(base_path, driver='ESRI Shapefile')
                             
                             # Create BytesIO object to store the zip
                             zip_buffer = BytesIO()
                             
                             # Create zip file in memory
                             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                                # Add all shapefile components to zip
-                                for ext in ['.shp', '.shx', '.dbf', '.prj']:
-                                    file_path = shp_path + ext
+                                # Add each shapefile component to the zip
+                                for filename in os.listdir(tmpdir):
+                                    file_path = os.path.join(tmpdir, filename)
                                     if os.path.exists(file_path):
-                                        # Add file to zip with just the filename (no path)
-                                        arcname = f"{base_name}{ext}"
                                         with open(file_path, 'rb') as f:
-                                            zipf.writestr(arcname, f.read())
+                                            zipf.writestr(filename, f.read())
                             
                             # Get the zip data
                             zip_buffer.seek(0)
@@ -614,7 +611,9 @@ def process_and_display(
                             
                             # Offer download if zip has content
                             if len(zip_data) > 100:  # Basic size check
-                                file_name = f"{base_name}.zip"
+                                # Offer download
+                                short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
+                                file_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles.zip"
                                 
                                 st.download_button(
                                     label=f"📥 {file_name}",
