@@ -580,9 +580,10 @@ def process_and_display(
                     # Create a temporary directory for the shapefile
                     with tempfile.TemporaryDirectory() as tmpdir:
                         try:
-                            # Save the shapefile with a complete filename
-                            shp_filename = "circles.shp"
-                            base_path = os.path.join(tmpdir, shp_filename)
+                            # Use the same naming convention as other downloads
+                            short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
+                            base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles"
+                            base_path = os.path.join(tmpdir, base_name)
                             
                             # Convert to WGS84 before saving
                             circles_gdf_wgs84 = circles_gdf.to_crs(epsg=4326)
@@ -611,9 +612,7 @@ def process_and_display(
                             
                             # Offer download if zip has content
                             if len(zip_data) > 100:  # Basic size check
-                                # Offer download
-                                short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
-                                file_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles.zip"
+                                file_name = f"{base_name}.zip"
                                 
                                 st.download_button(
                                     label=f"📥 {file_name}",
