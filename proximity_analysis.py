@@ -207,24 +207,29 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     popup=folium.Popup(tooltip_text, parse_html=False),
                 ).add_to(m)
 
+                # Create attribute names (truncate to 10 chars for shapefile compatibility)
+                sum_col_name = sum_col[:10] if sum_col else 'sum_value'
+                id_col_name = id_col[:10] if id_col else 'point_ids'
+                display_col_name = display_id[:10] if display_id else 'disp_ids'
+
                 # Create a circle polygon for the shapefile
                 circle_data.append({
                     'geometry': centroid.buffer(max_distance),
                     'group_id': int(group_id),
-                    'sum_value': float(group_points['group_sum'].values[0]),
-                    'point_ids': ','.join(map(str, group_points[id_col].tolist())),
-                    'display_ids': ','.join(map(str, group_points[display_id].tolist()))
-                }) 
-
-                # make sure that the lists don't include extra character like ' and [
-                circle_data[-1]['point_ids'] = circle_data[-1]['point_ids'].replace("'", "").replace("[", "").replace("]", "")
-                circle_data[-1]['display_ids'] = circle_data[-1]['display_ids'].replace("'", "").replace("[", "").replace("]", "")
+                    sum_col_name: float(group_points['group_sum'].values[0]),
+                    id_col_name: ','.join(map(str, group_points[id_col].tolist())),
+                    display_col_name: ','.join(map(str, group_points[display_id].tolist()))
+                })
 
     # Create a GeoDataFrame with the circle polygons
+    circles_gdf = None
     if circle_data:
-        circles_gdf = gpd.GeoDataFrame(circle_data, crs=gdf.crs)
-    else:
-        circles_gdf = None
+        try:
+            circles_gdf = gpd.GeoDataFrame(circle_data, crs=gdf.crs)
+            # Ensure the GeoDataFrame is valid
+            circles_gdf['geometry'] = circles_gdf['geometry'].buffer(0)
+        except Exception as e:
+            st.error(f"Error creating circles: {str(e)}")
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
