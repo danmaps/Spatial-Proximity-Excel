@@ -212,9 +212,9 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     'geometry': centroid.buffer(max_distance),
                     'group_id': int(group_id),
                     'sum_value': float(group_points['group_sum'].values[0]),
-                    'point_ids': str(group_points[id_col].tolist()),
-                    'display_ids': str(group_points[display_id].tolist())
-                })
+                    'point_ids': ','.join(map(str, group_points[id_col].tolist())),
+                    'display_ids': ','.join(map(str, group_points[display_id].tolist()))
+                }) 
 
                 # make sure that the lists don't include extra character like ' and [
                 circle_data[-1]['point_ids'] = circle_data[-1]['point_ids'].replace("'", "").replace("[", "").replace("]", "")
