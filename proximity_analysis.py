@@ -25,7 +25,7 @@ long_min, long_max = -117.82, -117.80  # longitude extent
 
 # Initialize a random seed in session state if it doesn't already exist
 if "random_seed" not in st.session_state:
-    st.session_state["random_seed"] = np.random.randint(0, 100)
+    st.session_state["random_seed"] = np.random.randint(0, 1000)
 
 # Use the stored random seed for reproducible randomness
 np.random.seed(st.session_state["random_seed"])
@@ -196,6 +196,13 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
 
             # Create a circle feature for the map and shapefile
             if not centroid_wgs84.is_empty:
+                # Determine if this is a singleton group (only one display_id)
+                unique_display_ids = len(group_points[display_id].unique())
+                
+                # For singleton groups, use a distance_threshold_meters buffer
+                if unique_display_ids == 1:
+                    max_distance =  distance_threshold_meters
+
                 # Create a circle for the map
                 folium.Circle(
                     location=[centroid_wgs84.y, centroid_wgs84.x],
@@ -217,8 +224,8 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     'geometry': centroid.buffer(max_distance),
                     'group_id': int(group_id),
                     sum_col_name: float(group_points['group_sum'].values[0]),
-                    id_col_name: ', '.join(map(str, group_points[id_col].tolist())),
-                    display_col_name: ', '.join(map(str, group_points[display_id].tolist()))
+                    id_col_name: ','.join(map(str, group_points[id_col].tolist())),
+                    display_col_name: ','.join(map(str, group_points[display_id].tolist()))
                 })
 
     # Create a GeoDataFrame with the circle polygons
