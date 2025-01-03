@@ -515,8 +515,8 @@ def create_groups_df(gdf,id_col,display_id,sum_col):
     
     # Group by 'group_id' and aggregate
     grouped_df = gdf.groupby('group_id').agg(
-        id_combined=(id_col, lambda x: ','.join(map(str, x))),
-        display_combined=(display_id, lambda x: ','.join(map(str, x))),
+        id_combined=(id_col, lambda x: ', '.join(map(str, x))),
+        display_combined=(display_id, lambda x: ', '.join(map(str, x))),
         group_QUANTITY=(f'group_{sum_col}', 'first')
     ).reset_index()
 
