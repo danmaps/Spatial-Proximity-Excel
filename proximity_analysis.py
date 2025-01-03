@@ -203,6 +203,9 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                 # For singleton groups, use a distance_threshold_meters buffer
                 if unique_display_ids == 1:
                     max_distance = distance_threshold_meters
+                else:
+                    # For groups with multiple points, use the larger of max_distance or distance_threshold_meters
+                    max_distance = max(max_distance, distance_threshold_meters)
 
                 # Set circle color based on threshold
                 is_above_threshold = not use_sum_threshold or group_points['group_sum'].iloc[0] >= sum_threshold
