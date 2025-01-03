@@ -125,8 +125,10 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
 
     # take advantage of the GeoDataFrame structure to set the style of the data
     def style_function(row):
-        if pd.isna(row['group_id']) or (use_sum_threshold and row.get('group_sum', 0) < sum_threshold):
+        if pd.isna(row['group_id']):
             return "gray"
+        elif use_sum_threshold and row.get('group_sum', 0) < sum_threshold:
+            return "#404040"  # dark grey for groups below threshold
         return "red"
 
     # Add a style column to the gdf
@@ -169,11 +171,8 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     # Add a minimum bounding circle to the points by group_id
     if "group_id" in gdf.columns:
         for group_id in gdf["group_id"].unique():
-            if use_sum_threshold:
-                # Filter groups with sum above threshold
-                group_points = gdf[(gdf["group_id"] == group_id) & (gdf["group_sum"] >= sum_threshold)]
-            else:
-                group_points = gdf[gdf["group_id"] == group_id]
+            # Get all points in the group regardless of threshold
+            group_points = gdf[gdf["group_id"] == group_id]
             
             if group_points.empty:
                 continue  # Skip empty groups
@@ -201,13 +200,16 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                 
                 # For singleton groups, use a distance_threshold_meters buffer
                 if unique_display_ids == 1:
-                    max_distance =  distance_threshold_meters
+                    max_distance = distance_threshold_meters
+
+                # Set circle color based on threshold
+                circle_color = "white" if not use_sum_threshold or group_points['group_sum'].iloc[0] >= sum_threshold else "#404040"
 
                 # Create a circle for the map
                 folium.Circle(
                     location=[centroid_wgs84.y, centroid_wgs84.x],
                     radius=max_distance,
-                    color="white",
+                    color=circle_color,
                     weight=2,
                     fill=True,
                     tooltip=tooltip_text,
