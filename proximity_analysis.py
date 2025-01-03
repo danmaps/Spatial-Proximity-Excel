@@ -476,35 +476,36 @@ def select_columns_ui(df, col_name, default_value):
     return st.selectbox(col_name, df.columns, index=default_index)
 
 
-def select_sidebar_columns(df, msg, options, default_value):
-    if default_value and default_value in options:
-        default_index = options.index(default_value)
-    else:
-        default_index = 0
-    with st.sidebar:
-        return st.selectbox(msg, options=options, index=default_index)
-
-
 def handle_column_selection(
     df, lat_default, lon_default, id_default, sum_default, display_id_default
 ):
-    lat_col = select_columns_ui(df, "Latitude Column", lat_default)
-    lon_col = select_columns_ui(df, "Longitude Column", lon_default)
+    st.subheader("Column Selection")
+    
+    # Create two columns for lat/lon selection
+    col1, col2 = st.columns(2)
+    with col1:
+        lat_col = select_columns_ui(df, "Latitude Column", lat_default)
+    with col2:
+        lon_col = select_columns_ui(df, "Longitude Column", lon_default)
 
+    # Create three columns for ID, display ID, and sum column
+    col1, col2, col3 = st.columns(3)
+    
     id_col_options = ["None"] + list(df.columns)
     display_id_options = ["None"] + list(df.columns)
-
-    id_col = select_sidebar_columns(
-        df, "Select a unique ID", id_col_options, id_default
-    )
-    display_id = select_sidebar_columns(
-        df, "Select an optional display ID", display_id_options, display_id_default
-    )
-    sum_col = st.sidebar.selectbox(
-        "Select a Sum Column",
-        df.columns,
-        index=df.columns.get_loc(sum_default) if sum_default in df.columns else 0,
-    )
+    
+    with col1:
+        id_col = st.selectbox("Select a unique ID", id_col_options, 
+            index=id_col_options.index(id_default) if id_default in id_col_options else 0)
+    with col2:
+        display_id = st.selectbox("Select an optional display ID", display_id_options,
+            index=display_id_options.index(display_id_default) if display_id_default in display_id_options else 0)
+    with col3:
+        sum_col = st.selectbox(
+            "Select a Sum Column",
+            df.columns,
+            index=df.columns.get_loc(sum_default) if sum_default in df.columns else 0,
+        )
 
     cols = {
         "lat_col": lat_col,
@@ -828,10 +829,13 @@ def offer_download(df, format, uploaded_file, distance_threshold_feet, groups=""
 "## Spatial Proximity Excel Enrichment"
 
 with st.sidebar:
-
     df, uploaded_file = handle_file_upload()
 
-    # Define a slider for distance selection
+# Move column selection and thresholds to main area
+col1, col2 = st.columns(2)
+
+with col1:
+    # Distance threshold section
     distance_threshold_feet = st.slider(
         "Distance threshold in feet",
         min_value=25,
@@ -841,24 +845,18 @@ with st.sidebar:
         format="%d feet",
     )
 
-    # Define a number input for custom distance thresholds
+    # Custom distance threshold
     custom_distance_threshold_feet = st.number_input(
         "Or enter a custom distance threshold in feet",
         min_value=0.0,
-        value=float(
-            distance_threshold_feet
-        ),  # set the default value to the slider's value
+        value=float(distance_threshold_feet),
         step=10.0,
         format="%f",
     )
-    # Choose which value to use based on whether the custom value differs from the slider
-    distance_threshold_feet = custom_distance_threshold_feet if custom_distance_threshold_feet != distance_threshold_feet else distance_threshold_feet
 
-    # Convert the chosen distance threshold in feet to meters for processing
-    distance_threshold_meters = distance_threshold_feet* 0.3048
-
+with col2:
+    # Sum threshold section
     use_sum_threshold = st.checkbox("Use group sum threshold", value=False)
-
     if use_sum_threshold:
         sum_threshold = st.slider(
             "Group sum threshold",
@@ -871,9 +869,16 @@ with st.sidebar:
     else:
         sum_threshold = None
 
+# Choose which value to use based on whether the custom value differs from the slider
+distance_threshold_feet = custom_distance_threshold_feet if custom_distance_threshold_feet != distance_threshold_feet else distance_threshold_feet
 
-    lat_col, lon_col, id_col, sum_col, display_id = select_columns(df, uploaded_file)
+# Convert the chosen distance threshold in feet to meters for processing
+distance_threshold_meters = distance_threshold_feet * 0.3048
 
+# Column selection in main area
+lat_col, lon_col, id_col, sum_col, display_id = select_columns(df, uploaded_file)
+
+with st.sidebar:
     "---"
     "### How it works"
     """
