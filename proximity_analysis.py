@@ -224,8 +224,8 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     'geometry': centroid.buffer(max_distance),
                     'group_id': int(group_id),
                     sum_col_name: float(group_points['group_sum'].values[0]),
-                    id_col_name: ','.join(map(str, group_points[id_col].tolist())),
-                    display_col_name: ','.join(map(str, group_points[display_id].tolist()))
+                    id_col_name: ', '.join(map(str, group_points[id_col].tolist())),
+                    display_col_name: ', '.join(map(str, group_points[display_id].tolist()))
                 })
 
     # Create a GeoDataFrame with the circle polygons
