@@ -165,8 +165,10 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
     # Reproject the GeoDataFrame to a suitable projected CRS (e.g., UTM)
     gdf = gdf.to_crs(epsg=32611)
 
-    # Create lists to store circle features and data
-    circle_data = []
+    # Create lists to store circle features and data for different types
+    circle_data_above = []  # For groups above threshold
+    circle_data_below = []  # For groups below threshold
+    circle_data_all = []    # For all groups when no threshold is used
 
     # Add a minimum bounding circle to the points by group_id
     if "group_id" in gdf.columns:
@@ -203,7 +205,8 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     max_distance = distance_threshold_meters
 
                 # Set circle color based on threshold
-                circle_color = "white" if not use_sum_threshold or group_points['group_sum'].iloc[0] >= sum_threshold else "#404040"
+                is_above_threshold = not use_sum_threshold or group_points['group_sum'].iloc[0] >= sum_threshold
+                circle_color = "white" if is_above_threshold else "#404040"
 
                 # Create a circle for the map
                 folium.Circle(
@@ -222,23 +225,47 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                 display_col_name = display_id[:10] if display_id else 'disp_ids'
 
                 # Create a circle polygon for the shapefile
-                circle_data.append({
+                circle_feature = {
                     'geometry': centroid.buffer(max_distance),
                     'group_id': int(group_id),
                     sum_col_name: float(group_points['group_sum'].values[0]),
                     id_col_name: ', '.join(map(str, group_points[id_col].tolist())),
                     display_col_name: ', '.join(map(str, group_points[display_id].tolist()))
-                })
+                }
 
-    # Create a GeoDataFrame with the circle polygons
-    circles_gdf = None
-    if circle_data:
-        try:
-            circles_gdf = gpd.GeoDataFrame(circle_data, crs=gdf.crs)
-            # Ensure the GeoDataFrame is valid
-            circles_gdf['geometry'] = circles_gdf['geometry'].buffer(0)
-        except Exception as e:
-            st.error(f"Error creating circles: {str(e)}")
+                # Add to appropriate lists based on threshold
+                if use_sum_threshold:
+                    if is_above_threshold:
+                        circle_data_above.append(circle_feature)
+                    else:
+                        circle_data_below.append(circle_feature)
+                else:
+                    circle_data_all.append(circle_feature)
+
+    # Create GeoDataFrames with the circle polygons
+    circles_gdfs = {}
+    
+    if use_sum_threshold:
+        if circle_data_above:
+            try:
+                circles_gdfs['above'] = gpd.GeoDataFrame(circle_data_above, crs=gdf.crs)
+                circles_gdfs['above']['geometry'] = circles_gdfs['above']['geometry'].buffer(0)
+            except Exception as e:
+                st.error(f"Error creating circles above threshold: {str(e)}")
+        
+        if circle_data_below:
+            try:
+                circles_gdfs['below'] = gpd.GeoDataFrame(circle_data_below, crs=gdf.crs)
+                circles_gdfs['below']['geometry'] = circles_gdfs['below']['geometry'].buffer(0)
+            except Exception as e:
+                st.error(f"Error creating circles below threshold: {str(e)}")
+    else:
+        if circle_data_all:
+            try:
+                circles_gdfs['all'] = gpd.GeoDataFrame(circle_data_all, crs=gdf.crs)
+                circles_gdfs['all']['geometry'] = circles_gdfs['all']['geometry'].buffer(0)
+            except Exception as e:
+                st.error(f"Error creating circles: {str(e)}")
 
     # Fit the map to the bounds
     m.fit_bounds(bounds)
@@ -251,7 +278,7 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
         force_separate_button=True,
     ).add_to(m)
 
-    return m, circles_gdf
+    return m, circles_gdfs
 
 
 # Main processing function
@@ -577,13 +604,13 @@ def process_and_display(
 
             # 1. Create and display the map
             if id_col:
-                m, circles_gdf = create_folium_map(
+                m, circles_gdfs = create_folium_map(
                     processed_gdf, distance_threshold_meters, lat_col, lon_col, id_col
                 )
                 
                 if use_sum_threshold:
                     st.caption(
-                        f"Points in groups with {sum_col} greater than {sum_threshold} are red."
+                        f"Points nearby (within {distance_threshold_feet}ft) others are red, and groups over {sum_threshold} {sum_col} (including single points) have white circles. Dark grey circles indicate groups below the threshold."
                     )
                 else:
                     st.caption(
@@ -592,9 +619,9 @@ def process_and_display(
                 
                 folium_static(m, width=1000, height=500)
 
-                # 2. Offer shapefile download for circles and points
-                if circles_gdf is not None and len(circles_gdf) > 0:
-                    st.caption("Download the shapefiles (circles and points):")
+                # 2. Offer shapefile downloads for circles and points
+                if circles_gdfs:
+                    st.caption("Download the shapefiles:")
                     # Create a temporary directory for the shapefile
                     with tempfile.TemporaryDirectory() as tmpdir:
                         try:
@@ -602,42 +629,96 @@ def process_and_display(
                             short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
                             base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft"
                             
-                            # Save both shapefiles first
-                            circles_path = os.path.join(tmpdir, f"{base_name}_circles.shp")
+                            # Save points shapefile
                             points_path = os.path.join(tmpdir, f"{base_name}_points.shp")
-                            
-                            # Convert to WGS84 and save
-                            circles_gdf_wgs84 = circles_gdf.to_crs(epsg=4326)
                             points_gdf_wgs84 = processed_gdf.to_crs(epsg=4326)
-                            
-                            circles_gdf_wgs84.to_file(circles_path, driver='ESRI Shapefile')
                             points_gdf_wgs84.to_file(points_path, driver='ESRI Shapefile')
-                            
-                            # Create zip file directly from the directory
-                            zip_path = os.path.join(tmpdir, f"{base_name}_shapes.zip")
-                            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                                # Add all files in the directory
+
+                            # Function to create zip file for a specific GeoDataFrame
+                            def create_circles_zip(gdf, suffix):
+                                try:
+                                    zip_path = os.path.join(tmpdir, f"{base_name}_circles_{suffix}.zip")
+                                    circles_path = os.path.join(tmpdir, f"{base_name}_circles_{suffix}.shp")
+                                    
+                                    # Convert to WGS84 and save
+                                    circles_gdf_wgs84 = gdf.to_crs(epsg=4326)
+                                    circles_gdf_wgs84.to_file(circles_path, driver='ESRI Shapefile')
+                                    
+                                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                                        # Add all related files
+                                        for filename in os.listdir(tmpdir):
+                                            if filename.startswith(f"{base_name}_circles_{suffix}") and filename.endswith(('.shp', '.shx', '.dbf', '.prj')):
+                                                file_path = os.path.join(tmpdir, filename)
+                                                zipf.write(file_path, arcname=filename)
+                                    
+                                    return zip_path
+                                except Exception as e:
+                                    st.error(f"Error creating circles zip for {suffix}: {str(e)}")
+                                    return None
+
+                            # Create points zip file
+                            points_zip_path = os.path.join(tmpdir, f"{base_name}_points.zip")
+                            with zipfile.ZipFile(points_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                                 for filename in os.listdir(tmpdir):
-                                    if filename.endswith(('.shp', '.shx', '.dbf', '.prj')):
+                                    if filename.startswith(f"{base_name}_points") and filename.endswith(('.shp', '.shx', '.dbf', '.prj')):
                                         file_path = os.path.join(tmpdir, filename)
-                                        # Add file to zip (arcname=filename preserves the filename without path)
                                         zipf.write(file_path, arcname=filename)
-                            
-                            # Read the zip file
-                            with open(zip_path, 'rb') as f:
-                                zip_data = f.read()
-                            
-                            # Offer download
-                            file_name = f"{base_name}_shapes.zip"
+
+                            # Offer points download
+                            with open(points_zip_path, 'rb') as f:
+                                points_zip_data = f.read()
                             st.download_button(
-                                label=f"📥 {file_name}",
-                                data=zip_data,
-                                file_name=file_name,
+                                label=f"📥 {base_name}_points.zip",
+                                data=points_zip_data,
+                                file_name=f"{base_name}_points.zip",
                                 mime="application/zip",
-                                key=f"shp_download_{short_file_name}_{distance_threshold_feet}",
-                                help=f"Click to download the shapefiles (circles and points)"
+                                key=f"points_shp_download_{short_file_name}_{distance_threshold_feet}",
+                                help=f"Click to download the points shapefile"
                             )
-                            
+
+                            # Create and offer circle downloads based on threshold usage
+                            if use_sum_threshold:
+                                if 'above' in circles_gdfs:
+                                    zip_path = create_circles_zip(circles_gdfs['above'], 'above_threshold')
+                                    if zip_path:
+                                        with open(zip_path, 'rb') as f:
+                                            zip_data = f.read()
+                                        st.download_button(
+                                            label=f"📥 {base_name}_circles_above_threshold.zip",
+                                            data=zip_data,
+                                            file_name=f"{base_name}_circles_above_threshold.zip",
+                                            mime="application/zip",
+                                            key=f"circles_above_shp_download_{short_file_name}_{distance_threshold_feet}",
+                                            help=f"Click to download the circles shapefile for groups above threshold"
+                                        )
+                                
+                                if 'below' in circles_gdfs:
+                                    zip_path = create_circles_zip(circles_gdfs['below'], 'below_threshold')
+                                    if zip_path:
+                                        with open(zip_path, 'rb') as f:
+                                            zip_data = f.read()
+                                        st.download_button(
+                                            label=f"📥 {base_name}_circles_below_threshold.zip",
+                                            data=zip_data,
+                                            file_name=f"{base_name}_circles_below_threshold.zip",
+                                            mime="application/zip",
+                                            key=f"circles_below_shp_download_{short_file_name}_{distance_threshold_feet}",
+                                            help=f"Click to download the circles shapefile for groups below threshold"
+                                        )
+                            else:
+                                if 'all' in circles_gdfs:
+                                    zip_path = create_circles_zip(circles_gdfs['all'], 'all')
+                                    if zip_path:
+                                        with open(zip_path, 'rb') as f:
+                                            zip_data = f.read()
+                                        st.download_button(
+                                            label=f"📥 {base_name}_circles.zip",
+                                            data=zip_data,
+                                            file_name=f"{base_name}_circles.zip",
+                                            mime="application/zip",
+                                            key=f"circles_all_shp_download_{short_file_name}_{distance_threshold_feet}",
+                                            help=f"Click to download the circles shapefile for all groups"
+                                        )
                         except Exception as e:
                             st.error(f"Error creating shapefiles: {str(e)}")
                 else:
