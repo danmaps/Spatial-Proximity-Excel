@@ -593,36 +593,30 @@ def process_and_display(
                             short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
                             base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft"
                             
-                            # Convert both GeoDataFrames to WGS84
+                            # Save both shapefiles first
+                            circles_path = os.path.join(tmpdir, f"{base_name}_circles.shp")
+                            points_path = os.path.join(tmpdir, f"{base_name}_points.shp")
+                            
+                            # Convert to WGS84 and save
                             circles_gdf_wgs84 = circles_gdf.to_crs(epsg=4326)
                             points_gdf_wgs84 = processed_gdf.to_crs(epsg=4326)
                             
-                            # Create BytesIO object to store the zip
-                            zip_buffer = BytesIO()
+                            circles_gdf_wgs84.to_file(circles_path, driver='ESRI Shapefile')
+                            points_gdf_wgs84.to_file(points_path, driver='ESRI Shapefile')
                             
-                            # Create zip file in memory
-                            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                                # Save and add circles shapefile
-                                circles_path = os.path.join(tmpdir, "circles")
-                                circles_gdf_wgs84.to_file(circles_path, driver='ESRI Shapefile')
-                                for ext in ['.shp', '.shx', '.dbf', '.prj']:
-                                    src_file = circles_path + ext
-                                    if os.path.exists(src_file):
-                                        with open(src_file, 'rb') as f:
-                                            zipf.writestr(f"{base_name}_circles{ext}", f.read())
-                                
-                                # Save and add points shapefile
-                                points_path = os.path.join(tmpdir, "points")
-                                points_gdf_wgs84.to_file(points_path, driver='ESRI Shapefile')
-                                for ext in ['.shp', '.shx', '.dbf', '.prj']:
-                                    src_file = points_path + ext
-                                    if os.path.exists(src_file):
-                                        with open(src_file, 'rb') as f:
-                                            zipf.writestr(f"{base_name}_points{ext}", f.read())
+                            # Create zip file directly from the directory
+                            zip_path = os.path.join(tmpdir, f"{base_name}_shapes.zip")
+                            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                                # Add all files in the directory
+                                for filename in os.listdir(tmpdir):
+                                    if filename.endswith(('.shp', '.shx', '.dbf', '.prj')):
+                                        file_path = os.path.join(tmpdir, filename)
+                                        # Add file to zip (arcname=filename preserves the filename without path)
+                                        zipf.write(file_path, arcname=filename)
                             
-                            # Get the zip data
-                            zip_buffer.seek(0)
-                            zip_data = zip_buffer.getvalue()
+                            # Read the zip file
+                            with open(zip_path, 'rb') as f:
+                                zip_data = f.read()
                             
                             # Offer download
                             file_name = f"{base_name}_shapes.zip"
