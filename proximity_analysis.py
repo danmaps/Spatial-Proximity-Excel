@@ -677,7 +677,7 @@ def process_and_display(
                 if use_sum_threshold and sum_threshold:
                     groups_over_threshold = groups_df[groups_df[f"{sum_col}"] >= sum_threshold]
                     unique_groups = len(groups_over_threshold["group_id"].unique())
-                    st.info(f"There are {len(groups_df)} groups. {unique_groups} of them are over {sum_threshold} {sum_col}.")
+                    st.info(f"There are {len(groups_df)} groups (including single points over {sum_threshold} {sum_col}). {unique_groups} of them are over {sum_threshold} {sum_col}.")
                     st.dataframe(groups_over_threshold)
                 else:
                     st.info(f"There are {len(groups_df)} groups.")
