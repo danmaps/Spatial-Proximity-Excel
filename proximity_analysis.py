@@ -216,6 +216,10 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     'display_ids': str(group_points[display_id].tolist())
                 })
 
+                # make sure that the lists don't include extra character like ' and [
+                circle_data[-1]['point_ids'] = circle_data[-1]['point_ids'].replace("'", "").replace("[", "").replace("]", "")
+                circle_data[-1]['display_ids'] = circle_data[-1]['display_ids'].replace("'", "").replace("[", "").replace("]", "")
+
     # Create a GeoDataFrame with the circle polygons
     if circle_data:
         circles_gdf = gpd.GeoDataFrame(circle_data, crs=gdf.crs)
