@@ -578,59 +578,69 @@ def process_and_display(
                 
                 folium_static(m, width=1000, height=500)
 
-                # 2. Offer shapefile download for circles
-                short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
-
-                if circles_gdf is not None:
-                    st.caption("Download the minimum bounding circles:")
+                # 2. Offer shapefile download for circles and points
+                if circles_gdf is not None and len(circles_gdf) > 0:
+                    st.caption("Download the shapefiles (circles and points):")
                     # Create a temporary directory for the shapefile
                     with tempfile.TemporaryDirectory() as tmpdir:
                         try:
-                            # Save the shapefile with a complete filename
-                            shp_filename = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles.shp"
-                            base_path = os.path.join(tmpdir, shp_filename)
+                            # Use the same naming convention as other downloads
+                            short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
+                            circles_base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles"
+                            points_base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_points"
                             
                             # Convert to WGS84 before saving
                             circles_gdf_wgs84 = circles_gdf.to_crs(epsg=4326)
-                            
-                            # Ensure the geometry is valid
-                            circles_gdf_wgs84['geometry'] = circles_gdf_wgs84['geometry'].buffer(0)
-                            
-                            # Save with explicit driver
-                            circles_gdf_wgs84.to_file(base_path, driver='ESRI Shapefile')
+                            points_gdf_wgs84 = processed_gdf.to_crs(epsg=4326)
                             
                             # Create BytesIO object to store the zip
                             zip_buffer = BytesIO()
                             
+                            # First save the shapefiles to get all components
+                            circles_path = os.path.join(tmpdir, "circles")
+                            points_path = os.path.join(tmpdir, "points")
+                            circles_gdf_wgs84.to_file(circles_path, driver='ESRI Shapefile')
+                            points_gdf_wgs84.to_file(points_path, driver='ESRI Shapefile')
+                            
                             # Create zip file in memory
                             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                                # Add each shapefile component to the zip
-                                for filename in os.listdir(tmpdir):
-                                    file_path = os.path.join(tmpdir, filename)
-                                    if os.path.exists(file_path):
-                                        with open(file_path, 'rb') as f:
-                                            zipf.writestr(filename, f.read())
+                                # Add circles shapefile components to zip
+                                for ext in ['.shp', '.shx', '.dbf', '.prj']:
+                                    src_file = circles_path + ext
+                                    if os.path.exists(src_file):
+                                        # Read the file content
+                                        with open(src_file, 'rb') as f:
+                                            # Add to zip with the desired name
+                                            zipf.writestr(f"{circles_base_name}{ext}", f.read())
+                                            
+                                # Add points shapefile components to zip
+                                for ext in ['.shp', '.shx', '.dbf', '.prj']:
+                                    src_file = points_path + ext
+                                    if os.path.exists(src_file):
+                                        # Read the file content
+                                        with open(src_file, 'rb') as f:
+                                            # Add to zip with the desired name
+                                            zipf.writestr(f"{points_base_name}{ext}", f.read())
                             
                             # Get the zip data
                             zip_buffer.seek(0)
                             zip_data = zip_buffer.getvalue()
                             
-                            # Offer download if zip has content
-                            if len(zip_data) > 100:  # Basic size check
-                                # Offer download
-                                file_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles.zip"
-                                
-                                st.download_button(
-                                    label=f"📥 {file_name}",
-                                    data=zip_data,
-                                    file_name=file_name,
-                                    mime="application/zip",
-                                    key=f"shp_download_{short_file_name}_{distance_threshold_feet}",
-                                    help=f"Click to download the circles shapefile"
-                                )
+                            # Offer download
+                            file_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_shapes.zip"
+                            st.download_button(
+                                label=f"📥 {file_name}",
+                                data=zip_data,
+                                file_name=file_name,
+                                mime="application/zip",
+                                key=f"shp_download_{short_file_name}_{distance_threshold_feet}",
+                                help=f"Click to download the shapefiles (circles and points)"
+                            )
                             
                         except Exception as e:
-                            st.error("Error creating shapefile. Please try again or contact support.")
+                            st.error(f"Error creating shapefiles: {str(e)}")
+                else:
+                    st.warning("No shapes to download. Try adjusting the distance threshold or sum threshold.")
                 
                 st.markdown("---")
 
