@@ -524,7 +524,7 @@ def create_groups_df(gdf,id_col,display_id,sum_col):
     grouped_df = gdf.groupby('group_id').agg(
         id_combined=(id_col, lambda x: ', '.join(map(str, x))),
         display_combined=(display_id, lambda x: ', '.join(map(str, x))),
-        group_QUANTITY=(f'group_{sum_col}', 'first')
+        group_QUANTITY=(f'group_{sum_col}', lambda x: round(x.iloc[0], 4))  # Round to 4 decimal places
     ).reset_index()
 
     # Determine the column renaming based on whether a file is uploaded
