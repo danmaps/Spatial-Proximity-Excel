@@ -217,8 +217,8 @@ def create_folium_map(gdf, distance_threshold_meters, lat_col, lon_col, id_col):
                     'geometry': centroid.buffer(max_distance),
                     'group_id': int(group_id),
                     sum_col_name: float(group_points['group_sum'].values[0]),
-                    id_col_name: ','.join(map(str, group_points[id_col].tolist())),
-                    display_col_name: ','.join(map(str, group_points[display_id].tolist()))
+                    id_col_name: ', '.join(map(str, group_points[id_col].tolist())),
+                    display_col_name: ', '.join(map(str, group_points[display_id].tolist()))
                 })
 
     # Create a GeoDataFrame with the circle polygons
@@ -591,48 +591,41 @@ def process_and_display(
                         try:
                             # Use the same naming convention as other downloads
                             short_file_name = os.path.splitext(uploaded_file.name)[0] if uploaded_file else "sample_data"
-                            circles_base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_circles"
-                            points_base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_points"
+                            base_name = f"{short_file_name}_{int(distance_threshold_feet)}ft"
                             
-                            # Convert to WGS84 before saving
+                            # Convert both GeoDataFrames to WGS84
                             circles_gdf_wgs84 = circles_gdf.to_crs(epsg=4326)
                             points_gdf_wgs84 = processed_gdf.to_crs(epsg=4326)
                             
                             # Create BytesIO object to store the zip
                             zip_buffer = BytesIO()
                             
-                            # First save the shapefiles to get all components
-                            circles_path = os.path.join(tmpdir, "circles")
-                            points_path = os.path.join(tmpdir, "points")
-                            circles_gdf_wgs84.to_file(circles_path, driver='ESRI Shapefile')
-                            points_gdf_wgs84.to_file(points_path, driver='ESRI Shapefile')
-                            
                             # Create zip file in memory
                             with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                                # Add circles shapefile components to zip
+                                # Save and add circles shapefile
+                                circles_path = os.path.join(tmpdir, "circles")
+                                circles_gdf_wgs84.to_file(circles_path, driver='ESRI Shapefile')
                                 for ext in ['.shp', '.shx', '.dbf', '.prj']:
                                     src_file = circles_path + ext
                                     if os.path.exists(src_file):
-                                        # Read the file content
                                         with open(src_file, 'rb') as f:
-                                            # Add to zip with the desired name
-                                            zipf.writestr(f"{circles_base_name}{ext}", f.read())
-                                            
-                                # Add points shapefile components to zip
+                                            zipf.writestr(f"{base_name}_circles{ext}", f.read())
+                                
+                                # Save and add points shapefile
+                                points_path = os.path.join(tmpdir, "points")
+                                points_gdf_wgs84.to_file(points_path, driver='ESRI Shapefile')
                                 for ext in ['.shp', '.shx', '.dbf', '.prj']:
                                     src_file = points_path + ext
                                     if os.path.exists(src_file):
-                                        # Read the file content
                                         with open(src_file, 'rb') as f:
-                                            # Add to zip with the desired name
-                                            zipf.writestr(f"{points_base_name}{ext}", f.read())
+                                            zipf.writestr(f"{base_name}_points{ext}", f.read())
                             
                             # Get the zip data
                             zip_buffer.seek(0)
                             zip_data = zip_buffer.getvalue()
                             
                             # Offer download
-                            file_name = f"{short_file_name}_{int(distance_threshold_feet)}ft_shapes.zip"
+                            file_name = f"{base_name}_shapes.zip"
                             st.download_button(
                                 label=f"📥 {file_name}",
                                 data=zip_data,
