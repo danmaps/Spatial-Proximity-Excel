@@ -74,8 +74,7 @@ To deactivate the virtual environment, use:
 
 ## Usage
 
-1. Place your Excel file in the project directory.
-2. Follow the prompts in the Streamlit app to upload your file and perform spatial analysis.
+Follow the prompts in the Streamlit app to upload your file and perform spatial analysis.
 
 ## Troubleshooting
 
