@@ -30,6 +30,8 @@ import numpy as np
 import geojson
 import tempfile
 import zipfile
+from jinja2 import Template
+import base64
 
 
 st.set_page_config(
@@ -706,7 +708,10 @@ def process_and_display(
                         f"Points nearby (within {distance_threshold_feet}ft) others are red."
                     )
                 
+                # Display map with custom camera screenshot control
                 folium_static(m, width=1000, height=500)
+                # Removed caption & HTML download button per user request
+                st.markdown("---")
 
                 # 2. Offer shapefile downloads for circles and points
                 if circles_gdfs:
@@ -990,13 +995,13 @@ with st.sidebar:
     
     **Key Capabilities:**
     1. **Distance Calculation**: Measures distances between all points in feet/meters
-    2. **Smart Clustering**: Groups nearby points using Union-Find algorithm
+    2. **Smart Clustering**: Groups nearby points efficiently using a fast clustering algorithm
     3. **Sum Analysis**: Aggregates values (capacity, cost, priority) by cluster
     4. **Visual Analytics**: Interactive maps with search and filtering
     
     **Algorithm:**
     - Uses spatial indexing (R-tree) for efficient proximity detection
-    - Implements Union-Find for O(α(n)) clustering performance
+    - Fast clustering algorithm groups nearby points efficiently
     - Projects to UTM for accurate distance calculations
     - Generates minimum bounding circles for cluster visualization
     """)
@@ -1070,7 +1075,7 @@ with st.sidebar:
     # Contact info
     st.markdown("**📧 Questions or Feedback?**")
     st.markdown("[Email Daniel McVey](mailto:daniel.mcvey@sce.com)")
-    st.caption("Version 1.0.0 • MIT License")
+    # st.caption("Version 1.0.0 • MIT License")
 
 process_and_display(
     df, lat_col, lon_col, id_col, display_id, distance_threshold_meters, sum_threshold, uploaded_file
