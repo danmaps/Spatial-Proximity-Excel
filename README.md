@@ -43,7 +43,7 @@ A geospatial analytics tool for performing proximity analysis on Excel spreadshe
 
 ### Online Access (Recommended)
 
-Access the hosted application instantly at [spatial-proximity-excel.streamlit.app](https://spatial-proximity-excel.streamlit.app/)
+Access the hosted application instantly at [spatial-proximity-excel.streamlit.app](https://proximity-analysis-excel.streamlit.app/)
 
 **No installation required** - Upload your Excel file and start analyzing immediately.
 
