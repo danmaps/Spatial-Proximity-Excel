@@ -54,6 +54,9 @@ st.set_page_config(
     }
 )
 
+from gisapps_header import gisapps_header
+gisapps_header(title="📍 Spatial Proximity Enricher")
+
 # ============================================================================
 # SAMPLE DATA GENERATION
 # ============================================================================
